@@ -69,7 +69,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 > # ConstrainedLanguage → script enforcement is ON
 > ```
 >
-> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and native services like Sysmon load without explicit rules because `Sysmon64.exe` is signed by `CN=Microsoft Windows Publisher` and is covered by the base Microsoft publisher allow rules already in the policy. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
+> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering). This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
@@ -109,6 +109,12 @@ These block lists cover known bypass tools such as `msbuild.exe`, `mshta.exe`, `
 ![File Rules — Microsoft Roots + Block Rules checked](images/02_file_rules_block_rules_checked.png)
 
 Save the policy XML (e.g., `AllowMicrosoft_2026-03-27.xml`) to `Documents` for now. The wizard will compile and place it appropriately in a later step.
+
+> 💡 **Microsoft-signed tools are covered automatically.** Any binary signed under the `CN=Microsoft Windows Publisher` chain — including tools like Sysmon — is allowed by the base Microsoft publisher rules without requiring an explicit rule. You can verify a tool's signing chain with:
+> ```powershell
+> Get-AuthenticodeSignature .\Sysmon64.exe | FL SignerCertificate, Status, IsOSBinary
+> ```
+> If `Status` is `Valid` and the subject shows `CN=Microsoft Windows Publisher`, no additional rule is needed.
 
 ---
 
