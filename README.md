@@ -1,5 +1,6 @@
 # 🛡️ App Control for Business (WDAC) on Windows 11 Enterprise 25H2 — PAW How-To
 
+> [!NOTE]
 > **Environment:**  
 > &nbsp;&nbsp;• Windows 11 Enterprise 25H2  
 > &nbsp;&nbsp;• Windows Server 2025 Core  
