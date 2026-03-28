@@ -53,6 +53,24 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 
 ## 3. 🔨 Step-by-Step Walkthrough
 
+> [!IMPORTANT]
+> **`Disabled:Script Enforcement` — Design Decision for PAW Environments**
+>
+> This policy is built with **script enforcement disabled** (`Disabled:Script Enforcement` in the XML). This is a deliberate choice for PAW environments where administrators need to run PowerShell scripts.
+>
+> What this setting does **not** do: it does not grant or remove the ability to run PowerShell for any user. WDAC has no admin-vs-user awareness at the script enforcement layer — it is a machine-wide binary switch. The binary `powershell.exe` itself is still subject to WDAC file rules.
+>
+> What this setting **does** do: when script enforcement is **enabled**, WDAC forces PowerShell into **Constrained Language Mode** for all users, machine-wide. This breaks admin tooling, Sysmon, and GPO-driven scripts. Disabling it keeps PowerShell in **Full Language Mode** for anyone who can launch the binary — which on a PAW is controlled by OS-level privilege separation, not WDAC.
+>
+> **Verify the active language mode at any time:**
+> ```powershell
+> $ExecutionContext.SessionState.LanguageMode
+> # FullLanguage  → script enforcement is OFF (expected with this policy)
+> # ConstrainedLanguage → script enforcement is ON
+> ```
+>
+> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and system services like Sysmon operate normally. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
+
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
 Open the App Control Policy Wizard → **Policy Creator** → choose a single base policy template.
@@ -309,7 +327,7 @@ Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2). 🎉
 
 ---
 
-**✅ WPAW-00-001050** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard Code Integrity Policy)*
+**WPAW-00-001050** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard Code Integrity Policy)*
 
 Checks that a WDAC/Code Integrity policy is deployed and active on the PAW. Verify with:
 
@@ -321,7 +339,7 @@ Get-CimInstance Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard 
 
 ---
 
-**✅ WPAW-00-001060** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard User Mode Code Integrity)*
+**WPAW-00-001060** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard User Mode Code Integrity)*
 
 Specifically checks that UMCI (User Mode Code Integrity) is enforced — not just kernel mode. Same command, but look for:
 
@@ -370,5 +388,9 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 
 ## 6. ⚠️ Important Caveats and Gotchas
 
-- 🐚 **Script enforcement + PowerShell CLM:** Enabling script enforcement can push PowerShell into Constrained Language Mode and break admin scripts and tooling. Audit and test scripts explicitly before enforcing. This is a critical design decision for PAW environments where scripting is required.
+- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, script enforcement pushes PowerShell into Constrained Language Mode machine-wide, breaking admin tooling, Sysmon, and GPO scripts. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
 - 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
+- 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
+- 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
+- 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
+- 🥾 **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
