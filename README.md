@@ -60,7 +60,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 >
 > What this setting does **not** do: it does not grant or remove the ability to run PowerShell for any user. WDAC has no admin-vs-user awareness at the script enforcement layer — it is a machine-wide binary switch. The binary `powershell.exe` itself is still subject to WDAC file rules.
 >
-> What this setting **does** do: when script enforcement is **enabled**, WDAC forces PowerShell into **Constrained Language Mode** for all users, machine-wide. This breaks admin tooling, Sysmon, and GPO-driven scripts. Disabling it keeps PowerShell in **Full Language Mode** for anyone who can launch the binary — which on a PAW is controlled by OS-level privilege separation, not WDAC.
+> What this setting **does** do: when script enforcement is **enabled**, WDAC forces PowerShell into **Constrained Language Mode** for all users, machine-wide. This breaks admin PowerShell tooling and GPO-driven scripts. Disabling it keeps PowerShell in **Full Language Mode** for anyone who can launch the binary — which on a PAW is controlled by OS-level privilege separation, not WDAC.
 >
 > **Verify the active language mode at any time:**
 > ```powershell
@@ -69,7 +69,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 > # ConstrainedLanguage → script enforcement is ON
 > ```
 >
-> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and system services like Sysmon operate normally. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
+> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and native services like Sysmon are governed by WDAC **file rules** — not script enforcement. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
@@ -388,7 +388,7 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 
 ## 6. ⚠️ Important Caveats and Gotchas
 
-- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, script enforcement pushes PowerShell into Constrained Language Mode machine-wide, breaking admin tooling, Sysmon, and GPO scripts. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
+- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, script enforcement pushes PowerShell into Constrained Language Mode machine-wide, breaking admin PowerShell tooling and GPO-driven scripts. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
 - 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
 - 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
 - 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
