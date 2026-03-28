@@ -114,10 +114,6 @@ Or via GPO:
 ```
 gpupdate /force
 ```
-Validate that the GPO has been applied to the Workstation (WIN11)
-```
-gpresult /r /scope computer
-```
 
 ---
 
@@ -173,13 +169,32 @@ Select **Parse Event Logs from the system Event Viewer to Policy** (uses local `
 
 ![Wizard — Convert Event Logs screen, successfully parsed](images/06_convert_event_logs.png)
 
-The wizard will parse the 3076 events and present them as candidate allow rules. Walk through them carefully:
+When the wizard presents candidate rules from the parsed 3076 events, you must choose a **rule level** for each one. Picking the right level is the most important decision in this step — too specific and you'll be updating rules constantly; too broad and you lose meaningful control.
 
-- **Adobe components** → use **Publisher** rules (covers the whole signing chain efficiently)
-- **7-Zip** → use **File Attributes** (publisher chain is less clean for event-log-driven conversion)
-- Avoid **Hash** rules as the primary strategy — they are brittle and require constant maintenance
+#### Rule Levels Available on Windows 11
 
-> **UX warning:** The wizard does not make undo easy after rules are added. Review before clicking through.
+> Reference: [App Control for Business feature availability — Microsoft Learn](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/feature-availability)
+
+| Rule Level | What it matches on | Windows 11 | Best used when |
+|---|---|---|---|
+| **Publisher** | The code-signing certificate's Issuing CA + the publisher's common name | ✅ | Vendor is well-known and consistently signs their software (e.g., Adobe, Microsoft) |
+| **FilePublisher** | Publisher + specific filename + minimum version | ✅ | You want Publisher-level trust but scoped to a specific executable and version floor |
+| **SignedVersion** | Publisher + a minimum version number (allows all files from that publisher at or above that version) | ✅ | Vendor ships frequent updates; you want to allow future versions without a policy change |
+| **FileName** | The `OriginalFileName` attribute in the file's resource header (not the on-disk name) | ✅ | App is not well-signed but has a stable, predictable original filename across updates |
+| **FilePath** | A specific file system path (user mode only — cannot allow kernel drivers) | ✅ (Win 10 1903+) | Trusted admin-only directories; runtime check enforces the path is not user-writable |
+| **Hash** | A unique cryptographic fingerprint of the exact binary | ✅ | Last resort only — every update changes the hash and requires a policy update |
+| **PackagedFamilyName** | MSIX/AppX package family name | ✅ | Store apps or MSIX-packaged software |
+| **WHQLFilePublisher** | WHQL-certified driver publisher + filename + version | ✅ | Driver allowlisting with version floors |
+
+#### Rule Selection for This Session
+
+Apply the hierarchy: **Publisher → FilePublisher → SignedVersion → FileName → FilePath → Hash**. Only drop down to the next level when the level above doesn't cleanly cover the target binary.
+
+- **Adobe components** → use **Publisher** — Adobe consistently signs its binaries with a clean chain; one rule covers all related executables
+- **7-Zip** → use **FileName** or **File Attributes** — the publisher chain is less clean in event-log conversion; FileName is more stable than Hash across updates
+- **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available
+
+> **UX warning:** The wizard does not make undo easy after rules are added. Review each candidate carefully before clicking through.
 
 ---
 
