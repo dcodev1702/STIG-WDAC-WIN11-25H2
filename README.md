@@ -1,4 +1,4 @@
-# App Control for Business (WDAC) on Windows 11 Enterprise 25H2 — PAW How-To
+# 🛡️ App Control for Business (WDAC) on Windows 11 Enterprise 25H2 — PAW How-To
 
 > **Environment:** Windows 11 Enterprise 25H2 · lab domain `skynet-home.local` · App Control Policy Wizard 2.7  
 > **Deployment method:** Group Policy (GPO)  
@@ -7,7 +7,7 @@
 
 ---
 
-## 1. Why This Matters — The Two STIG CAT II Findings
+## 1. 🎯 Why This Matters — The Two STIG CAT II Findings
 
 Before touching the wizard, understand what you are satisfying.
 
@@ -35,11 +35,11 @@ Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\D
 | 001050 | A CI policy is deployed and active | Policy is created, compiled to `.p7b`, deployed via GPO, and confirmed active via Event ID 3099 |
 | 001060 | UMCI is specifically enabled | `User Mode Code Integrity` rule is toggled **ON** in the wizard, making `UsermodeCodeIntegrityPolicyEnforcementStatus = 2` |
 
-Once the policy is in **enforce mode** and both values return `2`, both CAT II findings are closed.
+Once the policy is in **enforce mode** and both values return `2`, both CAT II findings are closed. ✅
 
 ---
 
-## 2. Pre-Requisites and Environment Assumptions
+## 2. 📋 Pre-Requisites and Environment Assumptions
 
 - **WDAC / App Control Policy Wizard 2.7** installed on the admin workstation
 - **MECM / ConfigMgr** present → keep **Managed Installer** enabled in the policy  
@@ -51,7 +51,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 
 ---
 
-## 3. Step-by-Step Walkthrough
+## 3. 🔨 Step-by-Step Walkthrough
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
@@ -74,7 +74,7 @@ Open the App Control Policy Wizard → **Policy Creator** → choose a single ba
 
 ![Policy Rules — Audit Mode with Advanced Options](images/01_policy_rules_audit_advanced.png)
 
-> **Note:** The Advanced Options panel (toggled at top-right) exposes **Boot Audit on Failure**, which is off by default. Enable it.
+> ⚠️ **Note:** The Advanced Options panel (toggled at top-right) exposes **Boot Audit on Failure**, which is off by default. Enable it.
 
 ---
 
@@ -114,10 +114,14 @@ Or via GPO:
 ```
 gpupdate /force
 ```
+Validate that the GPO has been applied to the Workstation (WIN11):
+```
+gpresult /r /scope computer
+```
 
 ---
 
-### Step 4 — Confirm Activation via Event Log
+### Step 4 — Confirm Activation via Event Log 🔍
 
 Watch the **Microsoft-Windows-CodeIntegrity/Operational** log:
 
@@ -132,14 +136,14 @@ Get-WinEvent -LogName "Microsoft-Windows-CodeIntegrity/Operational" -MaxEvents 1
 
 | Event ID | Meaning |
 |---|---|
-| **3099** | Policy refreshed and **activated** — the one to watch for |
+| **3099** ⭐ | Policy refreshed and **activated** — the one to watch for |
 | **3102** | Policy refresh finished (may show count of active policies) |
 | **3103** | Policy refresh ignored (e.g., duplicate or unchanged) |
 | **3096** | No change in active CI policy |
 | **3076** | Image **would have been blocked** but was allowed due to **audit mode** |
 | **3089** | Signature information associated with another event (use Correlation ID to link) |
 
-You want to see **3099** to confirm your policy is live. The **3076** events are your audit telemetry — they tell you exactly what would be blocked if you switched to enforce today.
+You want to see **3099** ⭐ to confirm your policy is live. The **3076** events are your audit telemetry — they tell you exactly what would be blocked if you switched to enforce today.
 
 ---
 
@@ -157,7 +161,7 @@ C:\Windows\System32\mmc.exe eventvwr.msc /c:"Microsoft-Windows-CodeIntegrity/Ope
 
 The example above shows `explorer.exe` attempting to load `7-Zip\7zFM.exe` — it was allowed because of audit mode, but the event tells you a rule for 7-Zip is needed before you enforce.
 
-> Tip: The filter banner at the top shows **29 events** for Event ID 3076 in this lab run — each one is a rule gap you need to close before enforcing.
+> 💡 **Tip:** The filter banner at the top shows **29 events** for Event ID 3076 in this lab run — each one is a rule gap you need to close before enforcing.
 
 ---
 
@@ -186,15 +190,15 @@ When the wizard presents candidate rules from the parsed 3076 events, you must c
 | **PackagedFamilyName** | MSIX/AppX package family name | ✅ | Store apps or MSIX-packaged software |
 | **WHQLFilePublisher** | WHQL-certified driver publisher + filename + version | ✅ | Driver allowlisting with version floors |
 
-#### Rule Selection for This Session
+#### 📐 Rule Selection for This Session
 
 Apply the hierarchy: **Publisher → FilePublisher → SignedVersion → FileName → FilePath → Hash**. Only drop down to the next level when the level above doesn't cleanly cover the target binary.
 
 - **Adobe components** → use **Publisher** — Adobe consistently signs its binaries with a clean chain; one rule covers all related executables
 - **7-Zip** → use **FileName** or **File Attributes** — the publisher chain is less clean in event-log conversion; FileName is more stable than Hash across updates
-- **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available
+- 🚫 **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available
 
-> **UX warning:** The wizard does not make undo easy after rules are added. Review each candidate carefully before clicking through.
+> ⚠️ **UX warning:** The wizard does not make undo easy after rules are added. Review each candidate carefully before clicking through.
 
 ---
 
@@ -211,11 +215,11 @@ Policy Editor → **Edit Policy XML File** → browse to your base XML → updat
 
 ![Wizard — Edit Policy screen with enforce naming](images/07_edit_policy_naming.png)
 
-> Convention: include `Enforce`/`Audit`, a date, and a version number. This makes troubleshooting much easier when you are looking at event logs days later.
+> 💡 Convention: include `Enforce`/`Audit`, a date, and a version number. This makes troubleshooting much easier when you are looking at event logs days later.
 
 ---
 
-### Step 8 — Switch to Enforce Mode
+### Step 8 — Switch to Enforce Mode 🔒
 
 On the **Policy Rules** screen, turn **Audit Mode OFF**. All other settings carry forward.
 
@@ -235,7 +239,7 @@ After merging the event-log-derived allow rules into the enforce policy and re-m
 
 ---
 
-### Step 10 — Deploy via Group Policy
+### Step 10 — Deploy via Group Policy 📡
 
 GPO path:
 ```
@@ -254,7 +258,7 @@ gpupdate /force
 
 ---
 
-### Step 11 — Validate: Enforcement in Action
+### Step 11 — Validate: Enforcement in Action 🚨
 
 #### App Control block toast
 
@@ -276,11 +280,11 @@ The before/after pattern:
 | Mode | What you see |
 |---|---|
 | **Audit** | Event 3076 — *"would have been blocked... allowed to load"* |
-| **Enforce** | App Control block toast + Event 3099 confirming policy active |
+| **Enforce** 🔒 | App Control block toast + Event 3099 confirming policy active |
 
 ---
 
-## 4. STIG Compliance Verification
+## 4. ✅ STIG Compliance Verification
 
 With the enforce policy active, run the STIG check command:
 
@@ -297,17 +301,17 @@ UsermodeCodeIntegrityPolicyEnforcementStatus  : 2
 
 | Value | Meaning |
 |---|---|
-| `2` | **Enforced** — finding is closed |
-| `1` | Audit only — finding is open |
-| `0` | Not running — finding is open |
+| `2` | ✅ **Enforced** — finding is closed |
+| `1` | ⚠️ Audit only — finding is open |
+| `0` | ❌ Not running — finding is open |
 
-Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2).
+Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2). 🎉
 
 ![STIG findings 001050 and 001060 with check commands](images/13_stig_findings.png)
 
 ---
 
-## 5. Key Reference Material
+## 5. 📚 Key Reference Material
 
 ### Paths and Commands
 
@@ -326,7 +330,7 @@ Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2).
 | 3076 | Would-have-been-blocked (audit mode telemetry) |
 | 3089 | Signature info for a correlated event |
 | 3096 | No change in active CI policy |
-| 3099 | Policy **refreshed and activated** |
+| 3099 ⭐ | Policy **refreshed and activated** |
 | 3102 | Policy refresh finished |
 | 3103 | Policy refresh ignored |
 | 3105 | Policy refresh in progress |
@@ -342,11 +346,7 @@ Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2).
 
 ---
 
-## 6. Important Caveats and Gotchas
+## 6. ⚠️ Important Caveats and Gotchas
 
-- **Script enforcement + PowerShell CLM:** Enabling script enforcement can push PowerShell into Constrained Language Mode and break admin scripts and tooling. Audit and test scripts explicitly before enforcing. This is a critical design decision for PAW environments where scripting is required.
-- **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
-- **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
-- **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
-- **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
-- **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
+- 🐚 **Script enforcement + PowerShell CLM:** Enabling script enforcement can push PowerShell into Constrained Language Mode and break admin scripts and tooling. Audit and test scripts explicitly before enforcing. This is a critical design decision for PAW environments where scripting is required.
+- 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
