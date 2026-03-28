@@ -69,7 +69,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 > # ConstrainedLanguage → script enforcement is ON
 > ```
 >
-> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and native services like Sysmon are governed by WDAC **file rules** — not script enforcement. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
+> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering), and native services like Sysmon load without explicit rules because `Sysmon64.exe` is signed by `CN=Microsoft Windows Publisher` and is covered by the base Microsoft publisher allow rules already in the policy. This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
