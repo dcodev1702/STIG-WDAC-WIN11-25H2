@@ -1,6 +1,10 @@
 # 🛡️ App Control for Business (WDAC) on Windows 11 Enterprise 25H2 — PAW How-To
 
-> **Environment:** Windows 11 Enterprise 25H2 · lab domain `skynet-home.local` · App Control Policy Wizard 2.7  
+> **Environment:**  
+> &nbsp;&nbsp;• Windows 11 Enterprise 25H2  
+> &nbsp;&nbsp;• Windows Server 2025 Core  
+> &nbsp;&nbsp;• Lab domain `skynet-home.local`  
+> &nbsp;&nbsp;• App Control Policy Wizard 2.7  
 > **Deployment method:** Group Policy (GPO)  
 > **Connectivity assumption:** Fully offline / disconnected — no ISG / cloud reputation  
 > **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)
