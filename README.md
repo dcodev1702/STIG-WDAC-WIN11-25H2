@@ -451,3 +451,106 @@ Requires all drivers to carry **Extended Validation (EV) certificates**. Many ol
 - 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
 - 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
 - 🥾 **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
+
+---
+
+## 8. 🖥️ Virtualization Based Security (VBS) & HVCI — Hyper-V Lab Setup
+
+Enabling VBS and HVCI on a Hyper-V guest requires configuration at two layers — the **host** (to expose virtualization extensions to the VM) and the **guest** (to configure and activate the VBS stack via GPO).
+
+---
+
+### On the Hyper-V Host
+
+> [!IMPORTANT]
+> The VM must be **shut down** before running these commands. Nested virtualization cannot be enabled on a running VM.
+
+**Step 1 — Expose virtualization extensions to the guest:**
+```powershell
+Set-VMProcessor -VMName "YourVMName" -ExposeVirtualizationExtensions $true
+```
+
+**Step 2 — Disable dynamic memory** (incompatible with VBS):
+```powershell
+Set-VMMemory -VMName "YourVMName" -DynamicMemoryEnabled $false
+```
+
+**Step 3 — Verify nested virtualization is enabled:**
+```powershell
+Get-VMProcessor -VMName "YourVMName" | Select-Object ExposeVirtualizationExtensions
+# ExposeVirtualizationExtensions : True
+```
+
+Boot the VM and proceed with guest configuration.
+
+---
+
+### On the Guest — Enable VBS via Group Policy
+
+**Step 1 — Open Group Policy Editor and navigate to:**
+```
+Computer Configuration → Administrative Templates → System → Device Guard
+→ Turn On Virtualization Based Security → Edit
+```
+
+**Step 2 — Set the following options:**
+
+| Setting | Recommended Value |
+|---|---|
+| Turn On Virtualization Based Security | **Enabled** |
+| Select Platform Security Level | Secure Boot and DMA Protection |
+| Virtualization Based Protection of Code Integrity | Enabled without UEFI lock |
+| Credential Guard Configuration | Enabled without UEFI lock |
+
+> [!IMPORTANT]
+> **Consider UEFI lock for production PAWs.** Enabling with UEFI lock writes the VBS configuration into firmware, meaning it cannot be disabled via software, Group Policy, or even a compromised OS. This is the right choice for a production PAW precisely because it prevents an attacker with SYSTEM or Domain Admin access from turning off Credential Guard or HVCI to facilitate credential theft or kernel exploitation. Without the lock, a sufficiently privileged attacker could simply GPO or registry their way around it.
+
+**Step 3 — Apply and reboot:**
+```
+gpupdate /force
+```
+Reboot the guest.
+
+**Step 4 — Verify the posture after reboot:**
+```powershell
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *virtualization*, *security*
+```
+
+---
+
+### Before / After — Expected State Change
+
+| Property | Before | After | Meaning |
+|---|---|---|---|
+| `VirtualizationBasedSecurityStatus` | `2` | `2` | ✅ VBS running at both stages |
+| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | ✅ Secure Boot + DMA Protection now required by policy |
+| `SecurityServicesConfigured` | `{0}` | `{1, 2}` | ✅ Credential Guard + HVCI configured |
+| `SecurityServicesRunning` | `{1}` | `{1, 2}` | ✅ Both Credential Guard and HVCI now running |
+| `SecurityFeaturesEnabled` | `{0}` | `{0}` | GPO-driven — reflects firmware-level features, expected |
+
+**`SecurityServicesRunning` decoded:**
+| Value | Service |
+|---|---|
+| `1` | Credential Guard |
+| `2` | HVCI (Hypervisor-Protected Code Integrity) |
+
+---
+
+### What This Posture Provides
+
+**Credential Guard** isolates LSASS into a VBS-protected enclave, preventing credential material (NTLM hashes, Kerberos tickets) from being read by tools like Mimikatz even with SYSTEM-level access. On a PAW this is critical — admin credentials are high-value targets.
+
+**HVCI (Hypervisor-Protected Code Integrity)** enforces kernel code integrity from the hypervisor layer, sitting below the OS. It prevents unsigned or malicious code from being injected into the kernel, and it strengthens WDAC enforcement by making it significantly harder to bypass — the hypervisor validates kernel code integrity independent of the OS itself.
+
+Together they form the hardware-backed security baseline that makes a PAW meaningfully resistant to credential theft and kernel-level attacks, not just application-layer controls.
+
+> 💡 **Combined with WDAC:** HVCI and WDAC are complementary controls. WDAC governs what can run in user mode and kernel mode. HVCI ensures those enforcement decisions cannot be subverted by kernel-level attackers. Running both is the recommended PAW posture.
+
+---
+
+### Microsoft Documentation
+
+| Resource | URL |
+|---|---|
+| Virtualization Based Security | https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs |
+| Configure Credential Guard | https://learn.microsoft.com/en-us/windows/security/identity-protection/credential-guard/configure |
