@@ -8,7 +8,8 @@
 > &nbsp;&nbsp;• App Control Policy Wizard 2.7  
 > **Deployment method:** Group Policy (GPO)  
 > **Connectivity assumption:** Fully offline / disconnected — no ISG / cloud reputation  
-> **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)
+> **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)  
+> **POC policy XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — the enforce-mode policy built during this walkthrough
 
 ---
 
@@ -61,11 +62,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 > [!IMPORTANT]
 > **`Disabled:Script Enforcement` — Design Decision for PAW Environments**
 >
-> This policy is built with **script enforcement disabled** (`Disabled:Script Enforcement` in the XML). This is a deliberate choice for PAW environments where administrators need to run PowerShell scripts.
->
-> What this setting does **not** do: it does not grant or remove the ability to run PowerShell for any user. WDAC has no admin-vs-user awareness at the script enforcement layer — it is a machine-wide binary switch. The binary `powershell.exe` itself is still subject to WDAC file rules.
->
-> What this setting **does** do: when script enforcement is **enabled**, WDAC enforces CLM based on **script policy coverage — not caller identity**. Any script not explicitly allowed by a policy rule runs in **Constrained Language Mode** regardless of who runs it — Domain Admin, SYSTEM, or standard user. Interactive PowerShell is also placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even if that policy is in audit mode. This means GPO startup scripts, admin `.ps1` tooling, and scheduled tasks running as SYSTEM are all equally subject to CLM if their scripts aren't covered by explicit policy allow rules. Disabling script enforcement removes this constraint entirely — Full Language Mode for all, with access controlled at the OS privilege layer instead.
+> This policy ships with script enforcement disabled. This is a deliberate PAW design choice: it keeps PowerShell in Full Language Mode for administrators while relying on OS-level privilege controls (not WDAC) to prevent standard users from launching PowerShell at all. When script enforcement is **enabled**, WDAC applies Constrained Language Mode machine-wide based on script policy coverage — not caller identity — which affects Domain Admins, SYSTEM, and standard users equally, including GPO startup scripts and admin tooling.
 >
 > **Verify the active language mode at any time:**
 > ```powershell
@@ -74,7 +71,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 > # ConstrainedLanguage → script enforcement is ON
 > ```
 >
-> The net result in this lab: regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering). This is the correct posture for a PAW. See [Section 6 — Caveats](#6-️-important-caveats-and-gotchas) for further detail.
+> See [Section 6 — Caveats & Advanced Options](#6-️-caveats-advanced-options--policy-rule-recommendations) for the full mechanics of CLM behavior and why this is the correct posture for a PAW.
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
@@ -150,9 +147,9 @@ gpresult /r /scope computer
 
 ---
 
-### Step 4 — Confirm Activation via Event Log 🔍
+### Step 4 — Confirm Policy Activation (Event ID 3099) 🔍
 
-Watch the **Microsoft-Windows-CodeIntegrity/Operational** log:
+After refreshing, verify the policy loaded successfully by watching the **Microsoft-Windows-CodeIntegrity/Operational** log for **Event ID 3099** — the activation confirmation:
 
 ```powershell
 # Quick PowerShell one-liner to check recent relevant events
@@ -172,13 +169,13 @@ Get-WinEvent -LogName "Microsoft-Windows-CodeIntegrity/Operational" -MaxEvents 1
 | **3076** | Image **would have been blocked** but was allowed due to **audit mode** |
 | **3089** | Signature information associated with another event (use Correlation ID to link) |
 
-You want to see **3099** ⭐ to confirm your policy is live. The **3076** events are your audit telemetry — they tell you exactly what would be blocked if you switched to enforce today.
+You want to see **3099** ⭐ to confirm your policy is live.
 
 ---
 
-### Step 5 — Audit: Let It Run, Collect Events
+### Step 5 — Collect Audit Telemetry (Event ID 3076)
 
-Leave the policy in audit mode and use the PAW normally — launch the applications that need to be allowed (Adobe, 7-Zip, admin tooling, etc.).
+With the policy confirmed active, leave it in audit mode and use the PAW normally — launch the applications that need to be allowed (Adobe, 7-Zip, admin tooling, etc.). The **3076** events are your audit telemetry — they tell you exactly what would be blocked if you switched to enforce today.
 
 Open Event Viewer and filter the CodeIntegrity/Operational log to **Event ID 3076**:
 
@@ -202,22 +199,7 @@ Select **Parse Event Logs from the system Event Viewer to Policy** (uses local `
 
 ![Wizard — Convert Event Logs screen, successfully parsed](images/06_convert_event_logs.png)
 
-When the wizard presents candidate rules from the parsed 3076 events, you must choose a **rule level** for each one. Picking the right level is the most important decision in this step — too specific and you'll be updating rules constantly; too broad and you lose meaningful control.
-
-#### Rule Levels Available on Windows 11
-
-> Reference: [App Control for Business feature availability — Microsoft Learn](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/feature-availability)
-
-| Rule Level | What it matches on | Windows 11 | Best used when |
-|---|---|---|---|
-| **Publisher** | The code-signing certificate's Issuing CA + the publisher's common name | ✅ | Vendor is well-known and consistently signs their software (e.g., Adobe, Microsoft) |
-| **FilePublisher** | Publisher + specific filename + minimum version | ✅ | You want Publisher-level trust but scoped to a specific executable and version floor |
-| **SignedVersion** | Publisher + a minimum version number (allows all files from that publisher at or above that version) | ✅ | Vendor ships frequent updates; you want to allow future versions without a policy change |
-| **FileName** | The `OriginalFileName` attribute in the file's resource header (not the on-disk name) | ✅ | App is not well-signed but has a stable, predictable original filename across updates |
-| **FilePath** | A specific file system path (user mode only — cannot allow kernel drivers) | ✅ (Win 10 1903+) | Trusted admin-only directories; runtime check enforces the path is not user-writable |
-| **Hash** | A unique cryptographic fingerprint of the exact binary | ✅ | Last resort only — every update changes the hash and requires a policy update |
-| **PackagedFamilyName** | MSIX/AppX package family name | ✅ | Store apps or MSIX-packaged software |
-| **WHQLFilePublisher** | WHQL-certified driver publisher + filename + version | ✅ | Driver allowlisting with version floors |
+When the wizard presents candidate rules from the parsed 3076 events, you must choose a **rule level** for each one. Picking the right level is the most important decision in this step — too specific and you'll be updating rules constantly; too broad and you lose meaningful control. See [Rule Levels Reference](#rule-levels-available-on-windows-11) below for the full table.
 
 #### 📐 Rule Selection for This Session
 
@@ -225,7 +207,9 @@ Apply the hierarchy: **Publisher → FilePublisher → SignedVersion → FileNam
 
 - **Adobe components** → use **Publisher** — Adobe consistently signs its binaries with a clean chain; one rule covers all related executables
 - **7-Zip** → use **FileName** or **File Attributes** — the publisher chain is less clean in event-log conversion; FileName is more stable than Hash across updates
-- 🚫 **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available
+- **Vendors with frequent updates** (e.g., a tool that ships monthly patches) → consider **SignedVersion** — allows all future versions at or above a version floor without policy changes
+- **Custom admin tools in locked-down directories** → consider **FilePath** — appropriate when the binary is unsigned but lives in an admin-only path like `C:\Program Files\CustomTool\`; WDAC enforces a runtime check that the path is not user-writable
+- 🚫 **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available and FilePath isn't appropriate
 
 > ⚠️ **UX warning:** The wizard does not make undo easy after rules are added. Review each candidate carefully before clicking through.
 
@@ -336,29 +320,7 @@ UsermodeCodeIntegrityPolicyEnforcementStatus  : 2
 
 Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2). 🎉
 
----
-
-**WPAW-00-001050** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard Code Integrity Policy)*
-
-Checks that a WDAC/Code Integrity policy is deployed and active on the PAW. Verify with:
-
-```powershell
-Get-CimInstance Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *codeintegrity*
-```
-
-`CodeIntegrityPolicyEnforcementStatus` must be **2** (enforced) or **1** (audit).
-
----
-
-**WPAW-00-001060** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard User Mode Code Integrity)*
-
-Specifically checks that UMCI (User Mode Code Integrity) is enforced — not just kernel mode. Same command, but look for:
-
-`UsermodeCodeIntegrityPolicyEnforcementStatus` = **2** (enforced) or **1** (audit).
-
----
-
-> These are the two WDAC checks — `001050` covers the CI policy existing at all, `001060` covers UMCI enforcement specifically. Your current policy has `Enabled:UMCI` in the rules, so you're on track to satisfy both once you move from audit to enforce mode.
+> For the full finding descriptions and what each check verifies, see [Section 1 — Why This Matters](#1--why-this-matters--the-two-stig-cat-ii-findings).
 
 ---
 
@@ -386,6 +348,21 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 | 3103 | Policy refresh ignored |
 | 3105 | Policy refresh in progress |
 
+### Rule Levels Available on Windows 11
+
+> Reference: [App Control for Business feature availability — Microsoft Learn](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/feature-availability)
+
+| Rule Level | What it matches on | Windows 11 | Best used when |
+|---|---|---|---|
+| **Publisher** | The code-signing certificate's Issuing CA + the publisher's common name | ✅ | Vendor is well-known and consistently signs their software (e.g., Adobe, Microsoft) |
+| **FilePublisher** | Publisher + specific filename + minimum version | ✅ | You want Publisher-level trust but scoped to a specific executable and version floor |
+| **SignedVersion** | Publisher + a minimum version number (allows all files from that publisher at or above that version) | ✅ | Vendor ships frequent updates; you want to allow future versions without a policy change |
+| **FileName** | The `OriginalFileName` attribute in the file's resource header (not the on-disk name) | ✅ | App is not well-signed but has a stable, predictable original filename across updates |
+| **FilePath** | A specific file system path (user mode only — cannot allow kernel drivers) | ✅ (Win 10 1903+) | Trusted admin-only directories; runtime check enforces the path is not user-writable |
+| **Hash** | A unique cryptographic fingerprint of the exact binary | ✅ | Last resort only — every update changes the hash and requires a policy update |
+| **PackagedFamilyName** | MSIX/AppX package family name | ✅ | Store apps or MSIX-packaged software |
+| **WHQLFilePublisher** | WHQL-certified driver publisher + filename + version | ✅ | Driver allowlisting with version floors |
+
 ### Links From the Session
 
 | Resource | URL |
@@ -397,18 +374,40 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 
 ---
 
-## 6. ⚠️ Important Caveats and Gotchas
+## 6. ⚠️ Caveats, Advanced Options & Policy Rule Recommendations
 
-- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, CLM is applied based on **script policy coverage, not caller identity** — Domain Admins, SYSTEM, and standard users are all equally subject to it. Any script not explicitly covered by a policy allow rule runs in Constrained Language Mode, including GPO startup scripts and admin tooling. Interactive PowerShell is placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even in audit mode. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
+This section consolidates operational gotchas and Advanced Options panel settings you need to understand before deploying to production.
+
+### Operational Gotchas
+
+- 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
+- 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
+- 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
+- 🥾 **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
 - 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
 
----
+### 🐚 Script Enforcement + PowerShell Constrained Language Mode — Deep Dive
 
-## 7. 🔬 Policy Rule Recommendations — Advanced Options
+This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. Here is the full picture of what this means and why:
+
+**What script enforcement does when enabled:** WDAC enforces Constrained Language Mode (CLM) based on **script policy coverage, not caller identity**. Any script not explicitly covered by a policy allow rule runs in CLM regardless of who runs it — Domain Admin, SYSTEM, or standard user. Interactive PowerShell is also placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even if that policy is in audit mode. This means GPO startup scripts, admin `.ps1` tooling, and scheduled tasks running as SYSTEM are all equally subject to CLM if their scripts aren't covered by explicit policy allow rules.
+
+**What disabling it does:** Removes the WDAC-level script constraint entirely. PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer instead.
+
+**The net result in this lab:** Regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering). This is the correct posture for a PAW.
+
+**Verify the active language mode at any time:**
+```powershell
+$ExecutionContext.SessionState.LanguageMode
+# FullLanguage  → script enforcement is OFF (expected with this policy)
+# ConstrainedLanguage → script enforcement is ON
+```
+
+### Advanced Options Panel — Setting-by-Setting Analysis
 
 The following settings appear in the wizard's Advanced Options panel or on the main Policy Rules screen. Each has been evaluated specifically for a **disconnected PAW environment** running Windows 11 Enterprise 25H2.
 
-### Summary
+#### Summary
 
 | Setting | Recommendation | Reason |
 |---|---|---|
@@ -420,41 +419,39 @@ The following settings appear in the wizard's Advanced Options panel or on the m
 
 ---
 
-### Treat Revoked as Unsigned — ✅ Leave OFF
+#### Treat Revoked as Unsigned — ✅ Leave OFF
 
-Treats binaries signed with revoked certificates as unsigned, which sounds like a security win but is risky in practice. In government and DoD environments you will frequently encounter legacy software with expired or revoked cert chains (Axway/Tumbleweed is a real-world example of this). Enabling this could silently block legitimate tooling that is otherwise valid. The risk of a false block outweighs the marginal security gain on a PAW where the binary allowlist is already the primary enforcement control.
+Treats binaries signed with revoked certificates as unsigned. In government and DoD environments you will frequently encounter legacy software with expired or revoked cert chains (Axway/Tumbleweed is a real-world example). On a PAW where the binary allowlist is already the primary enforcement control, the risk of silently breaking legitimate legacy tools outweighs the marginal security gain from this setting.
 
 ---
 
-### Disable Runtime Filepath Rules — ✅ Leave OFF
+#### Disable Runtime Filepath Rules — ✅ Leave OFF
 
 The naming is counterintuitive. Leaving this **OFF** means the protection is **ON** — the runtime check that ensures FilePath rules only apply to admin-writable paths is actively enforced. Enabling this toggle would allow FilePath rules to match user-writable paths, which undermines the security model entirely. Never appropriate on a PAW.
 
 ---
 
-### Dynamic Code Security — ⚠️ Leave OFF for now
+#### Dynamic Code Security — ⚠️ Leave OFF for now
 
 Extends WDAC enforcement to .NET assemblies and dynamically loaded code. Valuable in theory on a PAW, but carries a critical operational risk: **there is no audit mode for this setting**. The moment it is enabled it enforces immediately with no warning telemetry to identify what will break. Any .NET-based admin tooling, MMC snap-ins, or PowerShell modules that load dynamic assemblies could stop working instantly. Given the working set already includes Adobe, ADUC snap-ins, and GPO tools, leave this OFF for now. Treat it as a future hardening step requiring dedicated testing in a snapshot/rollback-capable lab environment before being applied to a production PAW.
 
 ---
 
-### Invalidate EAs on Reboot — ✅ Leave OFF
+#### Invalidate EAs on Reboot — ✅ Leave OFF
 
 This setting only has an effect when **Intelligent Security Graph (ISG)** is enabled — it forces ISG-authorized files to be revalidated against Microsoft's cloud reputation service on each reboot. Since this policy has ISG **disabled** (disconnected / no Internet environment), this toggle has no functional effect in either state. Leave it OFF.
 
 ---
 
-### Require EV Signers — ✅ Leave OFF
+#### Require EV Signers — ✅ Leave OFF
 
 Requires all drivers to carry **Extended Validation (EV) certificates**. Many older drivers — including common enterprise and government tooling — were signed with standard code signing certificates that predate the EV requirement. Enabling this without a complete driver inventory is a credible path to a boot failure. Leave it OFF unless you have audited every driver on the PAW and confirmed full EV coverage.
-- 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
-- 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
-- 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
-- 🥾 **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
 
 ---
 
-## 8. 🖥️ Virtualization Based Security (VBS) & HVCI — Hyper-V Lab Setup
+## 7. 🖥️ Virtualization Based Security (VBS) & HVCI — Hyper-V Lab Setup
+
+VBS and HVCI are complementary to WDAC and are typically configured as part of the same PAW hardening effort. WDAC governs what can run; HVCI ensures those enforcement decisions cannot be subverted at the kernel level. This section covers enabling both in a Hyper-V lab environment.
 
 Enabling VBS and HVCI on a Hyper-V guest requires configuration at two layers — the **host** (to expose virtualization extensions to the VM) and the **guest** (to configure and activate the VBS stack via GPO).
 
@@ -523,16 +520,22 @@ Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\D
 | Property | Before | After | Meaning |
 |---|---|---|---|
 | `VirtualizationBasedSecurityStatus` | `2` | `2` | ✅ VBS running at both stages |
-| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | ✅ Secure Boot + DMA Protection now required by policy |
-| `SecurityServicesConfigured` | `{0}` | `{1, 2}` | ✅ Credential Guard + HVCI configured |
-| `SecurityServicesRunning` | `{1}` | `{1, 2}` | ✅ Both Credential Guard and HVCI now running |
+| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | ✅ Now requires Secure Boot (1) + DMA Protection (2) |
+| `SecurityServicesConfigured` | `{0}` | `{1, 2}` | ✅ Credential Guard (1) + HVCI (2) configured |
+| `SecurityServicesRunning` | `{1}` | `{1, 2}` | ✅ Both Credential Guard (1) and HVCI (2) now running |
 | `SecurityFeaturesEnabled` | `{0}` | `{0}` | GPO-driven — reflects firmware-level features, expected |
 
-**`SecurityServicesRunning` decoded:**
+**Value decode for `SecurityServicesRunning` / `SecurityServicesConfigured`:**
 | Value | Service |
 |---|---|
 | `1` | Credential Guard |
 | `2` | HVCI (Hypervisor-Protected Code Integrity) |
+
+**Value decode for `RequiredSecurityProperties`:**
+| Value | Property |
+|---|---|
+| `1` | Secure Boot |
+| `2` | DMA Protection |
 
 ---
 
