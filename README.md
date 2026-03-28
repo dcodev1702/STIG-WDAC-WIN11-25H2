@@ -60,7 +60,7 @@ Once the policy is in **enforce mode** and both values return `2`, both CAT II f
 >
 > What this setting does **not** do: it does not grant or remove the ability to run PowerShell for any user. WDAC has no admin-vs-user awareness at the script enforcement layer — it is a machine-wide binary switch. The binary `powershell.exe` itself is still subject to WDAC file rules.
 >
-> What this setting **does** do: when script enforcement is **enabled**, WDAC forces PowerShell into **Constrained Language Mode** for all users, machine-wide. This breaks admin PowerShell tooling and GPO-driven scripts. Disabling it keeps PowerShell in **Full Language Mode** for anyone who can launch the binary — which on a PAW is controlled by OS-level privilege separation, not WDAC.
+> What this setting **does** do: when script enforcement is **enabled**, WDAC enforces CLM based on **script policy coverage — not caller identity**. Any script not explicitly allowed by a policy rule runs in **Constrained Language Mode** regardless of who runs it — Domain Admin, SYSTEM, or standard user. Interactive PowerShell is also placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even if that policy is in audit mode. This means GPO startup scripts, admin `.ps1` tooling, and scheduled tasks running as SYSTEM are all equally subject to CLM if their scripts aren't covered by explicit policy allow rules. Disabling script enforcement removes this constraint entirely — Full Language Mode for all, with access controlled at the OS privilege layer instead.
 >
 > **Verify the active language mode at any time:**
 > ```powershell
@@ -388,7 +388,7 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 
 ## 6. ⚠️ Important Caveats and Gotchas
 
-- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, script enforcement pushes PowerShell into Constrained Language Mode machine-wide, breaking admin PowerShell tooling and GPO-driven scripts. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
+- 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, CLM is applied based on **script policy coverage, not caller identity** — Domain Admins, SYSTEM, and standard users are all equally subject to it. Any script not explicitly covered by a policy allow rule runs in Constrained Language Mode, including GPO startup scripts and admin tooling. Interactive PowerShell is placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even in audit mode. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
 - 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
 
 ---
