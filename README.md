@@ -114,6 +114,10 @@ Or via GPO:
 ```
 gpupdate /force
 ```
+Validate that the GPO has been applied to the Workstation (WIN11)
+```
+gpresult /r /scope computer
+```
 
 ---
 
