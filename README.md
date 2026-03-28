@@ -390,6 +390,52 @@ Specifically checks that UMCI (User Mode Code Integrity) is enforced — not jus
 
 - 🐚 **Script enforcement + PowerShell CLM:** This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. When enabled, script enforcement pushes PowerShell into Constrained Language Mode machine-wide, breaking admin PowerShell tooling and GPO-driven scripts. With it disabled, PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer, not by WDAC. See the [!IMPORTANT] callout at the top of Section 3 for full detail and the language mode verification command.
 - 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
+
+---
+
+## 7. 🔬 Policy Rule Recommendations — Advanced Options
+
+The following settings appear in the wizard's Advanced Options panel or on the main Policy Rules screen. Each has been evaluated specifically for a **disconnected PAW environment** running Windows 11 Enterprise 25H2.
+
+### Summary
+
+| Setting | Recommendation | Reason |
+|---|---|---|
+| Treat Revoked as Unsigned | ✅ Leave **OFF** | Legacy cert chains in gov environments |
+| Disable Runtime Filepath Rules | ✅ Leave **OFF** | Keeping it OFF means the runtime path protection is ON |
+| Dynamic Code Security | ⚠️ Leave **OFF** for now | No audit mode — enforce-only, high break risk |
+| Invalidate EAs on Reboot | ✅ Leave **OFF** | ISG is disabled, this setting has no effect |
+| Require EV Signers | ✅ Leave **OFF** | Older drivers lack EV certs, boot risk |
+
+---
+
+### Treat Revoked as Unsigned — ✅ Leave OFF
+
+Treats binaries signed with revoked certificates as unsigned, which sounds like a security win but is risky in practice. In government and DoD environments you will frequently encounter legacy software with expired or revoked cert chains (Axway/Tumbleweed is a real-world example of this). Enabling this could silently block legitimate tooling that is otherwise valid. The risk of a false block outweighs the marginal security gain on a PAW where the binary allowlist is already the primary enforcement control.
+
+---
+
+### Disable Runtime Filepath Rules — ✅ Leave OFF
+
+The naming is counterintuitive. Leaving this **OFF** means the protection is **ON** — the runtime check that ensures FilePath rules only apply to admin-writable paths is actively enforced. Enabling this toggle would allow FilePath rules to match user-writable paths, which undermines the security model entirely. Never appropriate on a PAW.
+
+---
+
+### Dynamic Code Security — ⚠️ Leave OFF for now
+
+Extends WDAC enforcement to .NET assemblies and dynamically loaded code. Valuable in theory on a PAW, but carries a critical operational risk: **there is no audit mode for this setting**. The moment it is enabled it enforces immediately with no warning telemetry to identify what will break. Any .NET-based admin tooling, MMC snap-ins, or PowerShell modules that load dynamic assemblies could stop working instantly. Given the working set already includes Adobe, ADUC snap-ins, and GPO tools, leave this OFF for now. Treat it as a future hardening step requiring dedicated testing in a snapshot/rollback-capable lab environment before being applied to a production PAW.
+
+---
+
+### Invalidate EAs on Reboot — ✅ Leave OFF
+
+This setting only has an effect when **Intelligent Security Graph (ISG)** is enabled — it forces ISG-authorized files to be revalidated against Microsoft's cloud reputation service on each reboot. Since this policy has ISG **disabled** (disconnected / no Internet environment), this toggle has no functional effect in either state. Leave it OFF.
+
+---
+
+### Require EV Signers — ✅ Leave OFF
+
+Requires all drivers to carry **Extended Validation (EV) certificates**. Many older drivers — including common enterprise and government tooling — were signed with standard code signing certificates that predate the EV requirement. Enabling this without a complete driver inventory is a credible path to a boot failure. Leave it OFF unless you have audited every driver on the PAW and confirmed full EV coverage.
 - 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
 - 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
 - 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
