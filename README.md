@@ -307,7 +307,29 @@ UsermodeCodeIntegrityPolicyEnforcementStatus  : 2
 
 Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2). 🎉
 
-![STIG findings 001050 and 001060 with check commands](images/13_stig_findings.png)
+---
+
+**WPAW-00-001050** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard Code Integrity Policy)*
+
+Checks that a WDAC/Code Integrity policy is deployed and active on the PAW. Verify with:
+
+```powershell
+Get-CimInstance Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *codeintegrity*
+```
+
+`CodeIntegrityPolicyEnforcementStatus` must be **2** (enforced) or **1** (audit).
+
+---
+
+**WPAW-00-001060** — CAT II *Device Guard Code Integrity Policy must be used on the Windows PAW to restrict applications that can run on the system (Device Guard User Mode Code Integrity)*
+
+Specifically checks that UMCI (User Mode Code Integrity) is enforced — not just kernel mode. Same command, but look for:
+
+`UsermodeCodeIntegrityPolicyEnforcementStatus` = **2** (enforced) or **1** (audit).
+
+---
+
+> These are the two WDAC checks — `001050` covers the CI policy existing at all, `001060` covers UMCI enforcement specifically. Your current policy has `Enabled:UMCI` in the rules, so you're on track to satisfy both once you move from audit to enforce mode.
 
 ---
 
