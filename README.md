@@ -17,7 +17,7 @@
 
 Before touching the wizard, understand what you are satisfying.
 
-### WPAW-00-001050 — CAT II · Device Guard Code Integrity Policy (CI policy active)
+### V-243450 / WPAW-00-001050 — CAT II · Device Guard Code Integrity Policy
 
 > *The Windows PAW must have a WDAC / Code Integrity policy deployed and active to restrict which applications can run on the system.*
 
@@ -25,23 +25,32 @@ Before touching the wizard, understand what you are satisfying.
 ```powershell
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *codeintegrity*
 ```
-`CodeIntegrityPolicyEnforcementStatus` must be **2** (enforced) or **1** (audit).
+`CodeIntegrityPolicyEnforcementStatus` must be **2** (Enforced). This field reports the effective Code Integrity policy status on the PAW. A value of `1` is Audit and remains a finding.
 
-### WPAW-00-001060 — CAT II · Device Guard User Mode Code Integrity (UMCI)
+### V-243451 / WPAW-00-001060 — CAT II · Device Guard User Mode Code Integrity (UMCI)
 
 > *Same requirement as 001050, but specifically verifies that User Mode Code Integrity (UMCI) is enforced — not just kernel mode.*
 
 **Check (same command):**  
-`UsermodeCodeIntegrityPolicyEnforcementStatus` must be **2** (enforced) or **1** (audit).
+`UsermodeCodeIntegrityPolicyEnforcementStatus` must **independently** be **2** (Enforced). This field reports the effective user mode policy status. Enabling `UMCI` in the policy extends App Control checks to user mode executables and scripts, but the XML setting alone does not prove enforcement on a PAW.
+
+These are two separate [DISA PAW V3R3 STIG](https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/U_MS_Windows_PAW_V3R3_STIG.zip) checks. For **each** field, `0` means Not Configured, `1` means Audit, and `2` means Enforced. The number `2` is a status code, not a requirement to deploy two policies. In Audit mode, applications that would be blocked can still run while App Control logs the event; after removing the Audit Mode option, the policy runs in enforced mode. See [Microsoft's status definitions](https://learn.microsoft.com/en-us/windows/security/hardware-security/enable-virtualization-based-protection-of-code-integrity) and [App Control policy rule options](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create).
+
+| CI status | UMCI status | STIG result |
+|---|---|---|
+| `2` | `2` | Both numeric checks met; confirm the active policy allows only approved PAW applications. |
+| `2` | `0` or `1` | V-243450 numeric check met; V-243451 remains a finding. |
+| `0` or `1` | `2` | V-243450 remains a finding; V-243451 numeric check met. |
+| `0` or `1` | `0` or `1` | Both remain findings. |
 
 ### How this solution satisfies both findings
 
 | Finding | What is checked | How this policy addresses it |
 |---|---|---|
-| 001050 | A CI policy is deployed and active | Policy is created, compiled to `.p7b`, deployed via GPO, and confirmed active via Event ID 3099 |
-| 001060 | UMCI is specifically enabled | `User Mode Code Integrity` rule is toggled **ON** in the wizard, making `UsermodeCodeIntegrityPolicyEnforcementStatus = 2` |
+| V-243450 / 001050 | Effective CI policy enforcement | Deploy the policy, confirm it loaded, and verify `CodeIntegrityPolicyEnforcementStatus = 2` on each PAW. |
+| V-243451 / 001060 | Effective user mode CI enforcement | Enable UMCI, deploy the policy, and verify `UsermodeCodeIntegrityPolicyEnforcementStatus = 2` on each PAW. |
 
-Once the policy is in **enforce mode** and both values return `2`, both CAT II findings are closed. ✅
+Both values must return `2` on the target PAW. A policy XML file, GPO link, or Event ID 3099 alone cannot establish that either numeric check is met.
 
 ---
 
@@ -314,11 +323,11 @@ UsermodeCodeIntegrityPolicyEnforcementStatus  : 2
 
 | Value | Meaning |
 |---|---|
-| `2` | ✅ **Enforced** — finding is closed |
+| `2` | ✅ **Enforced** — that field meets its numeric STIG check |
 | `1` | ⚠️ Audit only — finding is open |
-| `0` | ❌ Not running — finding is open |
+| `0` | ❌ Not Configured — finding is open |
 
-Both `WPAW-00-001050` and `WPAW-00-001060` are **satisfied** (status = 2). 🎉
+With both values at `2`, the two numeric STIG checks are met on the tested PAW. Confirm that the loaded policy is the approved PAW allowlist before recording the final assessment.
 
 > For the full finding descriptions and what each check verifies, see [Section 1 — Why This Matters](#1--why-this-matters--the-two-stig-cat-ii-findings).
 
