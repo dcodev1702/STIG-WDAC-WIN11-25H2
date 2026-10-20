@@ -564,5 +564,6 @@ Together they form the hardware-backed security baseline that makes a PAW meanin
 
 | Resource | URL |
 |---|---|
+| Application Control for Business Wizard | https://webapp-wdac-wizard.azurewebsites.net |
 | Virtualization Based Security | https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs |
 | Configure Credential Guard | https://learn.microsoft.com/en-us/windows/security/identity-protection/credential-guard/configure |
