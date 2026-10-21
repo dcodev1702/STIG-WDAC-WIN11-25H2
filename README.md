@@ -779,3 +779,9 @@ Together they form the hardware-backed security baseline that makes a PAW meanin
 ## 8. Diagnostics and Troubleshooting
 
 Diagnostics are maintained in the standalone [Diagnostics and Troubleshooting runbook](DIAGNOSTICS-README.md), including source XML inspection, active policy checks, event correlation, and fresh audit queries.
+
+---
+
+## 9. Policy Reset
+
+Use the standalone [Policy Reset runbook](POLICY-RESET-README.md) for step-by-step instructions to identify custom policies, disable their deployment sources, complete signed-base prerequisites where required, remove only the reviewed policies, and verify the cleared state immediately and after restart.
