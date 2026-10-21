@@ -7,7 +7,7 @@
 > &nbsp;&nbsp;• Lab domain `skynet-home.local`  
 > &nbsp;&nbsp;• App Control Policy Wizard 2.8.1 (Oct 2026)
 > 
-> **Primary walkthrough:** One merged, unsigned, single-policy-format policy delivered by the built-in Group Policy setting<br>
+> **Primary walkthrough:** One merged single-policy-format policy delivered by the built-in Group Policy setting<br>
 > **Primary connectivity profile:** No Internet and no ISG / cloud reputation. PAWs stay domain-joined and receive policy through Group Policy and a UNC share — this is not an air-gapped or fully disconnected deployment.<br>
 > **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)  
 > **Historical POC XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — retained as the original enforce-mode example, not the latest policy<br>
