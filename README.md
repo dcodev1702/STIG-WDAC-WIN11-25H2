@@ -3,7 +3,7 @@
 > [!NOTE]
 > **Environment:**  
 > &nbsp;&nbsp;• Windows 11 Enterprise 25H2  
-> &nbsp;&nbsp;• Windows Server 2025 Core (Domain Controller)
+> &nbsp;&nbsp;• Windows Server 2025 Core (Domain Controller) <br/>
 > &nbsp;&nbsp;• Lab domain `skynet-home.local`  
 > &nbsp;&nbsp;• App Control Policy Wizard 2.8.1 (Oct 2026)  
 > **Primary walkthrough:** One merged, unsigned, single-policy-format policy delivered by the built-in Group Policy setting<br>
