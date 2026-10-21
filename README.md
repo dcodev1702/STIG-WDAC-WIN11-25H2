@@ -769,6 +769,7 @@ Together they form the hardware-backed security baseline that makes a PAW meanin
 | Resource | URL |
 |---|---|
 | Application Control for Business Wizard | https://webapp-wdac-wizard.azurewebsites.net |
+| Refresh CI Policy (RefreshPolicy.exe) download | https://www.microsoft.com/en-us/download/details.aspx?id=102925 |
 | Virtualization Based Security | https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs |
 | Configure Credential Guard | https://learn.microsoft.com/en-us/windows/security/identity-protection/credential-guard/configure |
 | Device Guard hardware property values | https://learn.microsoft.com/en-us/dotnet/api/microsoft.powershell.commands.deviceguardhardwaresecure |
