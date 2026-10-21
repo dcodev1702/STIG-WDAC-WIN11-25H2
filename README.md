@@ -5,7 +5,7 @@
 > &nbsp;&nbsp;• Windows 11 Enterprise 25H2  
 > &nbsp;&nbsp;• Windows Server 2025 Core  
 > &nbsp;&nbsp;• Lab domain `skynet-home.local`  
-> &nbsp;&nbsp;• App Control Policy Wizard 2.7  
+> &nbsp;&nbsp;• App Control Policy Wizard 2.8.1 (Oct 2026)  
 > **Primary walkthrough:** One merged, unsigned, single-policy-format policy delivered by the built-in Group Policy setting<br>
 > **Primary connectivity profile:** No Internet and no ISG / cloud reputation. PAWs stay domain-joined and receive policy through Group Policy and a UNC share — this is not an air-gapped or fully disconnected deployment.<br>
 > **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)  
@@ -61,7 +61,7 @@ Both values must return `2` on the target PAW. A policy XML file, GPO link, or E
 
 ## 2. 📋 Pre-Requisites and Environment Assumptions
 
-- **WDAC / App Control Policy Wizard 2.7** installed on the admin workstation
+- **WDAC / App Control Policy Wizard 2.8.1** installed on the admin workstation
 - **MECM / ConfigMgr:** Enable Managed Installer only when the deployment agent is designated through the appropriate AppLocker managed-installer configuration and file tagging has been verified. Installing ConfigMgr or enabling the WDAC option alone does not establish trust. Existing applications may need redeployment through the configured installer to acquire origin tags; use explicit rules where appropriate. See [Microsoft's Managed Installer guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/configure-authorized-apps-deployed-with-a-managed-installer).
 - Group Policy infrastructure available (domain-joined PAWs in a dedicated OU — `Workstation` in this lab)
 - **No Internet access in the primary profile** → keep **Intelligent Security Graph (ISG) disabled**; do not depend on cloud reputation for authorization. In this guide, "offline" means no Internet, not disconnected from the domain. The walkthrough still requires domain join, Group Policy, and a readable UNC share.
