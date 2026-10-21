@@ -145,7 +145,7 @@ $ResetPlan | ConvertTo-Json -Depth 5 |
 $ResetPlan | Format-List
 ```
 
-Copy the associated authoring XML and compiled deployment binaries into your protected change/backup location. Record their SHA256 values and current versions. Use [source XML inspection](README.md#inspect-the-source-xml-identity-version-and-rule-options) and `Get-FileHash` for each artifact. Do not assume a decoded binary export is a build-ready source.
+Copy the associated authoring XML and compiled deployment binaries into your protected change/backup location. Record their SHA256 values and current versions. Use [source XML inspection](DIAGNOSTICS-README.md#inspect-the-source-xml-identity-version-and-rule-options) and `Get-FileHash` for each artifact. Do not assume a decoded binary export is a build-ready source.
 
 ## 3. Stop Every Deployment Source before Removing Anything
 
@@ -440,7 +440,7 @@ If you change the letter, change **all** references in the block. Save the outpu
 - Deploy the new audit baseline to the pilot, verify its identity/options/version, record a new audit-round time boundary, and run approved workloads. Historical 3076s still belong to earlier rounds.
 - Restore the approved enforcement baseline and confirm CI/UMCI posture before returning a production PAW to normal service.
 
-Continue with the [main audit/merge/enforcement walkthrough](README.md#3--step-by-step-walkthrough) and [diagnostics](README.md#8-diagnostics-and-troubleshooting).
+Continue with the [main audit/merge/enforcement walkthrough](README.md#3--step-by-step-walkthrough) and [diagnostics](DIAGNOSTICS-README.md).
 
 ## Troubleshooting Stop Conditions
 
