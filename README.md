@@ -6,10 +6,13 @@
 > &nbsp;&nbsp;• Windows Server 2025 Core  
 > &nbsp;&nbsp;• Lab domain `skynet-home.local`  
 > &nbsp;&nbsp;• App Control Policy Wizard 2.7  
-> **Deployment method:** Group Policy (GPO)  
-> **Connectivity assumption:** Fully offline / disconnected — no ISG / cloud reputation  
+> **Primary walkthrough:** One merged, unsigned, single-policy-format policy delivered by the built-in Group Policy setting<br>
+> **Primary connectivity profile:** Fully offline / disconnected — no ISG / cloud reputation<br>
 > **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)  
-> **POC policy XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — the enforce-mode policy built during this walkthrough
+> **Historical POC XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — retained as the original enforce-mode example, not the latest policy<br>
+> **Later policy reviewed:** Version `10.0.5.9`, with ISG, UMCI, and supplemental support enabled; see the profile distinction below. Its binary and authoring XML are not included in this repository.
+
+**Start here:** [Choose merge or supplemental policies](#choose-the-policy-management-model-first) | [Walkthrough](#3--step-by-step-walkthrough) | [Diagnostics](#8-diagnostics-and-troubleshooting) | [Recovery and reset](#recovery-rollback-and-starting-over)
 
 ---
 
@@ -57,34 +60,69 @@ Both values must return `2` on the target PAW. A policy XML file, GPO link, or E
 ## 2. 📋 Pre-Requisites and Environment Assumptions
 
 - **WDAC / App Control Policy Wizard 2.7** installed on the admin workstation
-- **MECM / ConfigMgr** present → keep **Managed Installer** enabled in the policy  
-  (Note: ConfigMgr may require re-deployment or a registry workaround to be recognized as a trusted managed installer — see the Managed-Installer reference PDF shared during session)
+- **MECM / ConfigMgr:** Enable Managed Installer only when the deployment agent is designated through the appropriate AppLocker managed-installer configuration and file tagging has been verified. Installing ConfigMgr or enabling the WDAC option alone does not establish trust. Existing applications may need redeployment through the configured installer to acquire origin tags; use explicit rules where appropriate. See [Microsoft's Managed Installer guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/configure-authorized-apps-deployed-with-a-managed-installer).
 - Group Policy infrastructure available (domain-joined PAWs in a dedicated OU — `Workstation` in this lab)
-- **No Internet access** → **Intelligent Security Graph (ISG) must be disabled**
-- `RefreshPolicy.exe` (Refresh CI Policy, AMD64) available for no-reboot policy refresh
+- **No Internet access in the primary profile** → keep **Intelligent Security Graph (ISG) disabled**; do not depend on cloud reputation for offline authorization.
+- Windows PowerShell 5.1 with ConfigCI on the authoring workstation; use an elevated session on the target PAW for endpoint diagnostics.
+- `CiTool.exe` is built into Windows 11 25H2. `RefreshPolicy.exe` is an optional Microsoft refresh tool; neither replaces verification of activation.
 - Admin rights on the PAW being tested
+- A known-clean PAW with **only approved software**, a representative approved-workload test plan, and retained audit logs. This is the trust assumption for the audit-driven rule additions in this guide.
+- A pilot OU/device, a known-good policy backup, tested recovery access, and BitLocker recovery material before enforcement.
+
+### Choose the Policy Management Model First
+
+**Merging and supplementing are alternatives. Converting events into a policy does not automatically do either.**
+
+| Goal | Allow Supplemental Policies (option 17) | Result and deployment |
+|---|---|---|
+| Add approved event-derived rules to one existing base | **Not required** | Merge the XML files, compile, and redeploy the updated base. This is the primary GPO walkthrough below. |
+| Maintain separately deployed supplemental policies | **Required on the base**, plus correct association/signing | Use the multiple-policy workflow described in [Section 6](#alternative-base-plus-supplemental-policies). The built-in App Control GPO setting does not deploy a multiple-policy set. |
+
+You can enable supplemental support later by updating and redeploying a compatible base. You do **not** need to recreate an audit base merely because option 17 was originally off, and option 17 does **not** need to be enabled just to merge rules.
+
+For the merge path, put the intended base **first in the Wizard's displayed merge table** and the reviewed event-derived policy second. The first input determines the output identity/format; it does not make its allow rules override denies. See [Microsoft's Wizard merge guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/appcontrol-wizard-merging-policies).
+
+### Historical Offline POC versus the Later 10.0.5.9 Profile
+
+The later artifact reviewed was named `GPO_WDAC_ISG_WSL_DKR_Enforce_SiPolicy_v10.0.5.9_AllowSupplemental_UMCI.p7b`. Inspection of the associated authoring XML and compiled content established these **on-disk settings**, not endpoint activation:
+
+| Setting | Original offline walkthrough / POC | Later `10.0.5.9` artifact |
+|---|---|---|
+| UMCI | Enabled | Enabled |
+| Audit Mode in the final artifact | Absent: enforcement requested | Absent: enforcement requested |
+| ISG | Disabled | **Enabled: not the offline profile** |
+| Allow Supplemental Policies | Not enabled in the historical POC | Enabled |
+| Managed Installer / WHQL | Enabled in the historical POC | Enabled |
+| Script enforcement | Disabled | Disabled |
+| Boot Audit on Failure | Enabled | Enabled |
+
+The later authoring XML uses legacy `PolicyTypeID` layout. A decoded export containing `PolicyID`/`BasePolicyID` is not by itself proof of a migrated, supported multiple-policy deployment. Its decoded export also failed compilation with the installed ConfigCI schema because of an undeclared `OID` attribute; preserve the editable authoring source rather than assuming a decoded export is a build-ready replacement.
+
+The [Node.js runbook](docs/WDAC-NodeJS-GPO-Runbook.md) records a later lab with a GPO-delivered base and locally registered supplemental policies. Keep that observed lab history distinct from Microsoft's documented built-in GPO limitation and the reproducible primary workflow here. Do not infer current state from filenames or historical screenshots; use [Section 8](#8-diagnostics-and-troubleshooting).
 
 ---
 
 ## 3. 🔨 Step-by-Step Walkthrough
 
 > [!IMPORTANT]
-> **`Disabled:Script Enforcement` — Design Decision for PAW Environments**
+> **`Disabled:Script Enforcement` — Lab Exception, Not a Universal PAW Recommendation**
 >
-> This policy ships with script enforcement disabled. This is a deliberate PAW design choice: it keeps PowerShell in Full Language Mode for administrators while relying on OS-level privilege controls (not WDAC) to prevent standard users from launching PowerShell at all. When script enforcement is **enabled**, WDAC applies Constrained Language Mode machine-wide based on script policy coverage — not caller identity — which affects Domain Admins, SYSTEM, and standard users equally, including GPO startup scripts and admin tooling.
+> The supplied POC and later reviewed policy disable script enforcement for lab/admin-tool compatibility. This reduces WDAC script restrictions and requires an explicit risk decision and separate, verified controls over who can launch script hosts. This guide does not configure those user-specific controls. Administrator or SYSTEM identity does not itself exempt a script from App Control.
 >
-> **Verify the active language mode at any time:**
+> **Inspect the current PowerShell session:**
 > ```powershell
 > $ExecutionContext.SessionState.LanguageMode
-> # FullLanguage  → script enforcement is OFF (expected with this policy)
-> # ConstrainedLanguage → script enforcement is ON
 > ```
 >
-> See [Section 6 — Caveats & Advanced Options](#6-️-caveats-advanced-options--policy-rule-recommendations) for the full mechanics of CLM behavior and why this is the correct posture for a PAW.
+> This value describes the session, not every script or active policy. See [script enforcement and CLM](#script-enforcement-and-powershell-constrained-language-mode).
+
+**Lifecycle:** Create audit base → deploy and verify → exercise approved workloads → convert events → merge → redeploy in audit → re-test → version and enforce → validate.
+
+Version numbers below are examples continuing beyond `10.0.5.9`. If your deployed version is higher, choose higher versions for every update. Do not deploy an older example over a newer policy. If production is already enforced, perform audit iteration on an isolated pilot; do not downgrade fleet enforcement just to gather events.
 
 ### Step 1 — Create the Base Policy in the Wizard (Audit Mode First)
 
-Open the App Control Policy Wizard → **Policy Creator** → choose a single base policy template.
+Open the App Control Policy Wizard → **Policy Creator** → choose **Base Policy** and the **Allow Microsoft** template for this walkthrough. Confirm the output remains single-policy format for the built-in GPO path; do not silently convert an existing deployment to multiple-policy format.
 
 **Key decisions on the Policy Rules screen:**
 
@@ -92,18 +130,21 @@ Open the App Control Policy Wizard → **Policy Creator** → choose a single ba
 |---|---|---|
 | Audit Mode | **ON** | Always start here — never enforce an untested policy |
 | User Mode Code Integrity (UMCI) | **ON** | Required for WPAW-00-001060 |
-| Managed Installer | **ON** | MECM present in environment |
+| Managed Installer | **ON only if configured and verified** | MECM presence alone is insufficient |
+| Allow Supplemental Policies | **Not required for this merge workflow** | Enable only for a planned compatible supplemental workflow |
+| Require WHQL | **ON in the supplied policies** | Requires WHQL-signed drivers; inventory and test boot/peripheral drivers |
 | Unsigned System Integrity Policy | **ON** | Unsigned policy for initial deployment |
-| Update Policy without Rebooting | **ON** | Allows `RefreshPolicy.exe` to apply changes live |
+| Update Policy without Rebooting | **ON** | Permits supported future live updates; not a guarantee that every deployment avoids restart |
 | Advanced Boot Options Menu | **ON** | Safety net during testing |
-| Boot Audit on Failure | **ON** *(Advanced Options)* | If a driver/boot component fails, system falls back to audit rather than hard-blocking — critical safety net |
+| Boot Audit on Failure | **ON during testing** *(Advanced Options)* | Falls back to audit when a boot-critical driver is blocked; not general recovery protection |
 | Intelligent Security Graph | **OFF** | No Internet access — ISG will not function |
-| Treat Revoked as Unsigned | **OFF** | Government environments may have older cert chains (e.g., Axway/Tumbleweed) — leaving this off avoids false blocks |
-| Hypervisor-Protected Code Integrity | **OFF** | Not required for this scenario |
+| Treat Revoked as Unsigned | **OFF in the supplied example; review separately** | Not a general certificate-expiration compatibility switch |
+| Disable Script Enforcement | **ON in this lab exception** | Document the reduced script controls and test admin tooling |
+| Hypervisor-Protected Code Integrity | **OFF in this policy XML** | HVCI is separately configured and verified in Section 7 |
 
 ![Policy Rules — Audit Mode with Advanced Options](images/01_policy_rules_audit_advanced.png)
 
-> ⚠️ **Note:** The Advanced Options panel (toggled at top-right) exposes **Boot Audit on Failure**, which is off by default. Enable it.
+> ⚠️ **Note:** Expand Advanced Options and inspect the saved XML rather than assuming template defaults. Keep **Audit Mode ON** for initial testing. A screen with Audit Mode OFF is already configured for enforcement.
 
 ---
 
@@ -115,76 +156,108 @@ At the bottom, check **both**:
 - ✅ Merge with Recommended User Mode Block Rules
 - ✅ Merge with Recommended Kernel Mode Block Rules
 
-These block lists cover known bypass tools such as `msbuild.exe`, `mshta.exe`, `wmic.exe`, `wscript.exe`, `wsl.exe`, and older BGInfo versions. They increase policy file size but add meaningful coverage.
+The user-mode list restricts applications Microsoft identifies as potential App Control bypass tools; the kernel-mode list restricts vulnerable drivers. Exact entries and conditions change over time. Review the versions you actually merge and test approved admin tooling, WSL, and Docker where applicable. Do not assume a broad vendor allow will override an explicit deny.
 
 ![File Rules — Microsoft Roots + Block Rules checked](images/02_file_rules_block_rules_checked.png)
 
-Save the policy XML (e.g., `AllowMicrosoft_2026-03-27.xml`) to `Documents` for now. The wizard will compile and place it appropriately in a later step.
+Save the editable XML as `C:\WDAC\Source\Base-Audit.xml` (create your working directories first). Preserve this source and the selected block-list versions. Creating XML in the Wizard does not deploy it to the PAW.
 
-> 💡 **Microsoft-signed tools are covered automatically.** Any binary signed under the `CN=Microsoft Windows Publisher` chain — including tools like Sysmon — is allowed by the base Microsoft publisher rules without requiring an explicit rule. You can verify a tool's signing chain with:
+> 💡 **A Microsoft signature is not an unconditional allow.** The Allow Microsoft template provides broad Microsoft trust, but explicit denies and other active policies still apply. Inspect a tool's signature, then validate its actual policy result:
 > ```powershell
 > Get-AuthenticodeSignature .\Sysmon64.exe | FL SignerCertificate, Status, IsOSBinary
 > ```
-> If `Status` is `Valid` and the subject shows `CN=Microsoft Windows Publisher`, no additional rule is needed.
+> `Status = Valid` is useful signature evidence, not proof the tool is authorized by the complete active policy set.
 
 ---
 
-### Step 3 — Deploy to the Active Path and Refresh
+### Step 3 — Compile and Deploy the Audit Base through GPO
 
-Compiled `.p7b` policies live in:
+In Windows PowerShell 5.1 on the authoring workstation, version and compile the source:
+
+```powershell
+$BaseXml = 'C:\WDAC\Source\Base-Audit.xml'
+$AuditBinary = 'C:\WDAC\Compiled\PAW-Audit.p7b'
+Set-CIPolicyVersion -FilePath $BaseXml -Version '10.0.5.10' -ErrorAction Stop
+ConvertFrom-CIPolicy -XmlFilePath $BaseXml -BinaryFilePath $AuditBinary -ErrorAction Stop
 ```
-C:\Windows\System32\CodeIntegrity\CIPolicies\Active\
+
+Create the source/compiled directories before running the commands. Publish the binary to your approved deployment share. The example UNC path used here is `\\YourPolicyServer\WDAC$\PAW-Audit.p7b`; replace it with your actual share. Target computer accounts need read access at both share and NTFS levels; only authorized policy administrators should be able to replace the policy.
+
+Configure the pilot GPO:
+
+```text
+Computer Configuration\Administrative Templates\System\Device Guard
+  Deploy App Control for Business = Enabled
+  Policy path = \\YourPolicyServer\WDAC$\PAW-Audit.p7b
 ```
+
+For this **single-policy GPO path**, the deployed endpoint file is `C:\Windows\System32\CodeIntegrity\SiPolicy.p7b`, not a `.p7b` under `CiPolicies\Active`. Multiple-policy deployment instead uses `{PolicyID}.cip` files under `C:\Windows\System32\CodeIntegrity\CiPolicies\Active`.
 
 ![CodeIntegrity folder showing SiPolicy.p7b placed](images/05_codeintegrity_folder.png)
 
-The `SiPolicy.p7b` file (306 KB, timestamped 3/27/2026) is the compiled policy now sitting in the active location. The older `driversipolicy.p7b` and `VbsSiPolicy.p7b` are pre-existing system policies — leave them alone.
+The screenshot shows the historical `SiPolicy.p7b` in the `CodeIntegrity` root. Leave pre-existing Microsoft platform policies such as `driversipolicy.p7b` and `VbsSiPolicy.p7b` alone.
 
-Trigger a no-reboot refresh:
+On the pilot PAW, apply GPO and inspect computer-scope results:
 ```powershell
-# Using the RefreshPolicy.exe tool (AMD64 binary from Microsoft)
-.\RefreshPolicy.exe
-```
-Or via GPO:
-```
 gpupdate /force
-```
-Validate that the GPO has been applied to the Workstation (WIN11):
-```
+if ($LASTEXITCODE -ne 0) { throw "gpupdate failed: $LASTEXITCODE" }
 gpresult /r /scope computer
+if ($LASTEXITCODE -ne 0) { throw "gpresult failed: $LASTEXITCODE" }
 ```
+
+**Restart the pilot for the initial built-in GPO deployment**, as documented by Microsoft, then verify the loaded policy in Step 4. A successful `gpupdate` means policy processing completed, not that the intended WDAC binary activated. Supported live updates may use CiTool/RefreshPolicy when applicable, but do not substitute those tools for activation evidence or an explicit reboot requirement. See [Microsoft's GPO deployment procedure](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy).
 
 ---
 
 ### Step 4 — Confirm Policy Activation (Event ID 3099) 🔍
 
-After refreshing, verify the policy loaded successfully by watching the **Microsoft-Windows-CodeIntegrity/Operational** log for **Event ID 3099** — the activation confirmation:
+On the PAW, query **Microsoft-Windows-CodeIntegrity/Operational** for **3099** and any refresh failures. Filter at the event source before limiting the result count:
 
 ```powershell
-# Quick PowerShell one-liner to check recent relevant events
-Get-WinEvent -LogName "Microsoft-Windows-CodeIntegrity/Operational" -MaxEvents 10 |
-    Where-Object Id -in 3076, 3089 |
-    Select-Object TimeCreated, Id, Message
+$Since = (Get-Date).AddHours(-4)
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3095, 3097, 3099, 3100
+    StartTime = $Since
+} -MaxEvents 20 -ErrorAction Stop |
+    Select-Object TimeCreated, Id, Message |
+    Format-List
 ```
+
+The following historical screenshot shows **audit/signature telemetry, not activation evidence**:
 
 ![PowerShell output showing Event IDs 3076 and 3089](images/03_powershell_3076_3089.png)
 
 | Event ID | Meaning |
 |---|---|
-| **3099** ⭐ | Policy refreshed and **activated** — the one to watch for |
+| **3099** ⭐ | Policy loaded; match the intended identity, version, and options in Details/XML |
+| **3095** | Refresh requires a reboot |
+| **3097 / 3100** | Refresh failed / refreshed policy did not activate successfully |
 | **3102** | Policy refresh finished (may show count of active policies) |
 | **3103** | Policy refresh ignored (e.g., duplicate or unchanged) |
 | **3096** | No change in active CI policy |
 | **3076** | Image **would have been blocked** but was allowed due to **audit mode** |
+| **3077** | An enforced policy blocked the file |
 | **3089** | Signature information associated with another event (use Correlation ID to link) |
 
-You want to see **3099** ⭐ to confirm your policy is live.
+Match the intended policy in CiTool inventory and the event details; do not accept another policy's 3099 as proof. Check that audit mode and UMCI are actually configured. See [diagnostics](#8-diagnostics-and-troubleshooting).
+
+After successful activation, record a new test boundary **on the PAW**, then exercise the workloads in Step 5:
+
+```powershell
+$AuditRoundStart = Get-Date
+$AuditRoundStart.ToString('o')
+```
+
+Record this timestamp with the policy version and test results. Keep the session open or restore that recorded timestamp for later queries; do not reset it after the tests.
 
 ---
 
 ### Step 5 — Collect Audit Telemetry (Event ID 3076)
 
-With the policy confirmed active, leave it in audit mode and use the PAW normally — launch the applications that need to be allowed (Adobe, 7-Zip, admin tooling, etc.). The **3076** events are your audit telemetry — they tell you exactly what would be blocked if you switched to enforce today.
+With the intended policy confirmed active in audit, run the approved PAW test plan: installation/update paths, Adobe, 7-Zip, admin consoles, PowerShell tooling, services, scheduled tasks, and WSL/Docker if approved for this PAW. Cover relevant users and a restart. A 3076 identifies a file that **that policy** would block in enforcement.
+
+**Trust boundary for this lab:** the PAW is known-clean and only approved software is exercised. Its audit feedback is therefore the intended input for approved rule additions. Still confirm the event belongs to this PAW, test window, policy, and workload; that prevents stale/unrelated records from expanding the allowlist accidentally. In less controlled environments, the event alone is not an approval decision.
 
 Open Event Viewer and filter the CodeIntegrity/Operational log to **Event ID 3076**:
 
@@ -196,7 +269,30 @@ C:\Windows\System32\mmc.exe eventvwr.msc /c:"Microsoft-Windows-CodeIntegrity/Ope
 
 The example above shows `explorer.exe` attempting to load `7-Zip\7zFM.exe` — it was allowed because of audit mode, but the event tells you a rule for 7-Zip is needed before you enforce.
 
-> 💡 **Tip:** The filter banner at the top shows **29 events** for Event ID 3076 in this lab run — each one is a rule gap you need to close before enforcing.
+> 💡 **Tip:** The historical filter shows **29 events**, not necessarily 29 applications or 29 unique rules. Events may repeat for executables, DLLs, drivers, or multiple policies. Group by file and policy before deciding coverage.
+
+### Will Old 3076 Events Still Appear after an Update?
+
+**Yes. Deploying a new policy does not erase, relabel, or re-evaluate existing event-log records.** An unrestricted Event Viewer filter or another full-log parse can still show the old entries.
+
+- Fresh runs of files now covered by the updated base should no longer generate new 3076s **from that base**.
+- Fresh events can still identify an uncovered component, a changed binary/hash, an explicit deny, an old policy that remained active, or another audit policy.
+- Installing a new policy does not automatically rerun every application. No new events is meaningful only after the approved workloads were actually exercised.
+- If an independent enforced policy blocks the workload, an additional audit policy does not override that block.
+
+Query only the new round, then inspect policy identity in the event details:
+
+```powershell
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3076
+    StartTime = $AuditRoundStart
+} -MaxEvents 100 -ErrorAction Stop |
+    Select-Object TimeCreated, Id, Message |
+    Format-List
+```
+
+Preserve historical logs rather than clearing them to simulate a clean round. [Section 8](#inspect-fresh-audit-events-by-policy) includes a policy-ID-aware query.
 
 ---
 
@@ -204,7 +300,9 @@ The example above shows `explorer.exe` attempting to load `7-Zip\7zFM.exe` — i
 
 Back in the wizard → **Policy Editor** → **Convert Event Logs to a Policy**.
 
-Select **Parse Event Logs from the system Event Viewer to Policy** (uses local `Microsoft-Windows-CodeIntegrity/Operational` and `Microsoft-Windows-AppLocker/MSI and Script` logs), then click **Parse Event Logs**.
+If the Wizard is running **on the PAW**, select **Parse Event Logs from the system Event Viewer to Policy** and click **Parse Event Logs**. This reads that computer's local `Microsoft-Windows-CodeIntegrity/Operational` and `Microsoft-Windows-AppLocker/MSI and Script` logs.
+
+If the Wizard is on another workstation, export the PAW's relevant logs and use **Parse Event Log evtx Files to Policy** instead. Preserve 3089 signature records along with 3076s; script/MSI audit uses 8028 with 8038 signature information. Parsing local logs on the authoring workstation does not collect PAW events. Export/filter for the intended test window where supported, or exclude older/unrelated candidates during review.
 
 ![Wizard — Convert Event Logs screen, successfully parsed](images/06_convert_event_logs.png)
 
@@ -212,56 +310,89 @@ When the wizard presents candidate rules from the parsed 3076 events, you must c
 
 #### 📐 Rule Selection for This Session
 
-Apply the hierarchy: **Publisher → FilePublisher → SignedVersion → FileName → FilePath → Hash**. Only drop down to the next level when the level above doesn't cleanly cover the target binary.
+Choose the **narrowest maintainable trust scope** appropriate to the approved application; there is no universal broad-to-narrow fallback hierarchy.
 
-- **Adobe components** → use **Publisher** — Adobe consistently signs its binaries with a clean chain; one rule covers all related executables
-- **7-Zip** → use **FileName** or **File Attributes** — the publisher chain is less clean in event-log conversion; FileName is more stable than Hash across updates
-- **Vendors with frequent updates** (e.g., a tool that ships monthly patches) → consider **SignedVersion** — allows all future versions at or above a version floor without policy changes
-- **Custom admin tools in locked-down directories** → consider **FilePath** — appropriate when the binary is unsigned but lives in an admin-only path like `C:\Program Files\CustomTool\`; WDAC enforces a runtime check that the path is not user-writable
-- 🚫 **Avoid Hash as primary strategy** — every binary update invalidates the rule and requires a policy change; use it only when no signing info is available and FilePath isn't appropriate
+- **Signed Adobe or other vendor components:** consider **FilePublisher** for specific approved files and a version floor. Use **Publisher** only when approving the wider publisher's software is intentional.
+- **Frequent updates:** FilePublisher can allow later versions of the same signed file. **SignedVersion** is broader: it allows files from that publisher at or above the floor, not just the particular application.
+- **7-Zip and unsigned admin utilities:** inspect the actual release's signature. Use a scoped signed rule where available; **Hash** is a valid precise choice for an approved unsigned release, with a planned update process.
+- **FileName / standalone File Attributes:** these match resource metadata, not publisher authenticity. Metadata can be imitated; do not treat a stable name as equivalent to a signature.
+- **FilePath:** consider only for approved user-mode files in an ACL-verified admin-writable location. Leave runtime path protection enabled; this is unsuitable for user-writable directories and cannot authorize kernel drivers.
 
 > ⚠️ **UX warning:** The wizard does not make undo easy after rules are added. Review each candidate carefully before clicking through.
 
+Save the reviewed event-derived output as `C:\WDAC\Source\Events-Reviewed.xml`. It is a **separate input policy**, not a modification to your base and not automatically a supplemental policy. Retain parser warnings and check for omitted files; log conversion is not a guarantee that every component received a usable rule.
+
 ---
 
-### Step 7 — Rename and Version the Policy for Enforce
+### Step 7 — Merge the Base First and Reviewed Event Rules Second
 
-Before merging and switching to enforce, edit the policy identity so audit vs. enforce is unambiguous.
+1. Open the Wizard's **Policy Merger**.
+2. Select **+ Add Policy** and add `Base-Audit.xml`.
+3. Add `Events-Reviewed.xml` second.
+4. Verify **Base-Audit.xml is the first row in the displayed table**. Do not rely on a file-picker's selection order.
+5. Choose `C:\WDAC\Source\Base-Audit-Merged.xml` as a **new output** and build the merged policy.
+6. Open that output in **Policy Editor** and confirm Audit Mode remains ON, UMCI remains ON, intended options are present, and existing deny rules remain.
 
-Policy Editor → **Edit Policy XML File** → browse to your base XML → update:
+The first input determines the output type, ID, name, and version information. This is not "first allow rule wins"; denies remain effective. There is no requirement to enable option 17 for this merge.
 
-| Field | Example value |
-|---|---|
-| Policy Name | `Enforce-Microsoft_2026-03-27` |
-| Policy ID | `2026-03-27v3` |
+PowerShell equivalent on the authoring workstation:
+
+```powershell
+Merge-CIPolicy -PolicyPaths 'C:\WDAC\Source\Base-Audit.xml','C:\WDAC\Source\Events-Reviewed.xml' `
+    -OutputFilePath 'C:\WDAC\Source\Base-Audit-Merged.xml' -ErrorAction Stop
+```
+
+Do **not** deploy `Events-Reviewed.xml` as an unrelated enforced base to "add" its rules. Separate enforced bases generally intersect their allowed sets, rather than extending the original base.
+
+---
+
+### Step 8 — Redeploy the Merged Policy in Audit and Run a New Round
+
+Version and compile the merged output, not the old unmerged base:
+
+```powershell
+$MergedXml = 'C:\WDAC\Source\Base-Audit-Merged.xml'
+Set-CIPolicyVersion -FilePath $MergedXml -Version '10.0.5.11' -ErrorAction Stop
+ConvertFrom-CIPolicy -XmlFilePath $MergedXml `
+    -BinaryFilePath 'C:\WDAC\Compiled\PAW-Audit.p7b' -ErrorAction Stop
+```
+
+Publish the new binary to the pilot GPO's audit source path and repeat Steps 3-4. Confirm the new version actually loaded. Then record a **new** `$AuditRoundStart` and re-run the approved test plan.
+
+Old 3076s remain visible; use the new time boundary and policy identity. Approved files covered by the new rules should stop producing fresh 3076s from this base. Investigate remaining events, revise/merge again as needed, and increment the version for each deployment. Do not declare success merely because no new application was launched.
+
+---
+
+### Step 9 — Prepare the Validated Merged Policy for Enforcement
+
+Copy the validated merged XML to `C:\WDAC\Source\Base-Enforce.xml`, preserving the tested audit source. In **Policy Editor → Edit Policy XML File**, select this copy, set a useful friendly name such as `PAW-Enforce_2026-10-21`, and turn **Audit Mode OFF**.
 
 ![Wizard — Edit Policy screen with enforce naming](images/07_edit_policy_naming.png)
 
-> 💡 Convention: include `Enforce`/`Audit`, a date, and a version number. This makes troubleshooting much easier when you are looking at event logs days later.
-
----
-
-### Step 8 — Switch to Enforce Mode 🔒
-
-On the **Policy Rules** screen, turn **Audit Mode OFF**. All other settings carry forward.
+**Identity is not versioning:** the Wizard's friendly PolicyInfo identifier (the date-like `Policy ID` shown in this historical screenshot) is distinct from a multiple-policy GUID and `VersionEx`. Preserve the actual deployed policy identity when updating it. Do not reset GUIDs just to change audit/enforce mode.
 
 ![Policy Rules — Enforce Mode (Audit Mode off)](images/08_policy_rules_enforce.png)
 
-Note: In enforce mode the Advanced Options panel is collapsed by default — the rules you set earlier (Boot Audit on Failure, etc.) are still in the XML; they just are not shown by default in this view.
+Expand Advanced Options and inspect the saved XML. Do not assume collapsed controls or a filename establish the final settings. Keep required allow rules and approved deny lists; re-import block lists only when intentionally updating them and re-testing their impact.
+
+![File Rules — policy showing existing Deny rules](images/09_file_rules_deny_rules.png)
+
+Unchecked block-list merge boxes do not prove entries are absent; rules may already be in the XML. A signer-list label alone also does not prove an entire CA is denied: inspect rule references and file/version constraints.
+
+Compile a forward enforcement revision:
+
+```powershell
+$EnforceXml = 'C:\WDAC\Source\Base-Enforce.xml'
+Set-CIPolicyVersion -FilePath $EnforceXml -Version '10.0.5.12' -ErrorAction Stop
+ConvertFrom-CIPolicy -XmlFilePath $EnforceXml `
+    -BinaryFilePath 'C:\WDAC\Compiled\PAW-Enforce.p7b' -ErrorAction Stop
+```
+
+Archive the XML, binary, SHA256, version, test results, and rollback source together.
 
 ---
 
-### Step 9 — File Rules After Merge with Block Lists (Enforce Policy)
-
-After merging the event-log-derived allow rules into the enforce policy and re-merging the block lists, the File Rules screen now shows both **Allow** (Microsoft root publishers) and **Deny** entries (DigiCert/VeriSign chains associated with known bypass tools).
-
-![File Rules — Enforce policy with Deny rules from block lists](images/09_file_rules_deny_rules.png)
-
-> In this view the "Merge with Recommended Block Rules" checkboxes are unchecked — that is correct; the deny rules have already been merged into the policy XML. The resulting deny entries for DigiCert Assured ID, DigiCert SHA2, and VeriSign Class 3 chains are visible in the list.
-
----
-
-### Step 10 — Deploy via Group Policy 📡
+### Step 10 — Publish and Deploy the Enforcement Revision to the Pilot
 
 GPO path:
 ```
@@ -269,14 +400,22 @@ Computer Configuration\Administrative Templates\System\Device Guard
 → Deploy App Control for Business → Edit
 ```
 
-In this lab: GPO `GPO_WDAC_Enforcement` is linked to the `Workstation` OU in `skynet-home.local`.
+Publish `PAW-Enforce.p7b` to the approved share and point the pilot's effective GPO setting to its UNC path, for example `\\YourPolicyServer\WDAC$\PAW-Enforce.p7b`. In this lab, GPO `GPO_WDAC_Enforcement` is linked to the `Workstation` OU in `skynet-home.local`.
+
+Resolve competing GPO settings deliberately: multiple links do not turn the built-in single-policy deployment setting into additive policy distribution. Confirm the resultant source path on the target.
 
 ![Group Policy Management — GPO_WDAC_Enforcement linked to Workstation OU](images/11_gpo_management.png)
 
-Push the policy:
-```
+Apply and verify on the PAW:
+
+```powershell
 gpupdate /force
+if ($LASTEXITCODE -ne 0) { throw "gpupdate failed: $LASTEXITCODE" }
+gpresult /r /scope computer
+if ($LASTEXITCODE -ne 0) { throw "gpresult failed: $LASTEXITCODE" }
 ```
+
+Restart for this reproducible GPO workflow, verify the intended identity/version and absence of Audit Mode in the loaded configuration, then repeat the approved workload tests. Roll out beyond the pilot only after enforcement validation and recovery checks pass.
 
 ---
 
@@ -284,7 +423,7 @@ gpupdate /force
 
 #### App Control block toast
 
-After the enforce policy refreshes (watch for Event ID **3099**), attempt to launch an unauthorized application — Firefox in this test:
+After confirming the intended enforcement revision loaded, first run approved applications and administrative/recovery tools. Then use a controlled negative test: a benign, nonapproved application that you have verified is outside every applicable allow mechanism. The historical example used Firefox:
 
 ![Desktop — Firefox blocked, GPO_WDAC_Enforcement visible in GPMC](images/12_firefox_blocked_desktop.png)
 
@@ -294,7 +433,7 @@ The end-user sees:
 
 #### Event log confirmation
 
-The Event Viewer simultaneously shows the 3099 activation event alongside the block:
+The historical screenshot shows activation context and the user-facing block. Confirm the actual executable block with **3077**, correlated to the file and intended policy; a 3099 is not a block event.
 
 ![Event Viewer — 3099 activation + Firefox block toast](images/10_event_viewer_3099_block.png)
 
@@ -302,7 +441,9 @@ The before/after pattern:
 | Mode | What you see |
 |---|---|
 | **Audit** | Event 3076 — *"would have been blocked... allowed to load"* |
-| **Enforce** 🔒 | App Control block toast + Event 3099 confirming policy active |
+| **Enforce** 🔒 | Event 3077 for the denied file; a toast may appear. Event 3099 separately establishes policy loading. |
+
+In the connected/ISG or Managed Installer profiles, a nominally "unapproved" test file may be authorized by reputation or installation origin. Choose a test consistent with the actual trust model; failure to block that one file does not by itself identify which mechanism allowed it.
 
 ---
 
@@ -339,23 +480,32 @@ With both values at `2`, the two numeric STIG checks are met on the tested PAW. 
 
 | Item | Value |
 |---|---|
-| Active policy path | `C:\Windows\System32\CodeIntegrity\CIPolicies\Active\` |
+| Single-policy GPO deployment | `C:\Windows\System32\CodeIntegrity\SiPolicy.p7b` |
+| Multiple-policy deployment | `C:\Windows\System32\CodeIntegrity\CiPolicies\Active\{PolicyID}.cip` |
 | Open CI event log | `C:\Windows\System32\mmc.exe eventvwr.msc /c:"Microsoft-Windows-CodeIntegrity/Operational"` |
 | GPO node | `Computer Configuration\Administrative Templates\System\Device Guard\Deploy App Control for Business` |
 | Force GPO refresh | `gpupdate /force` |
 | STIG check | `Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard \| FL *codeintegrity*` |
+
+For read-only source XML inspection and target PAW checks, see [Section 8 - Diagnostics and Troubleshooting](#8-diagnostics-and-troubleshooting).
 
 ### Event ID Reference
 
 | ID | Meaning |
 |---|---|
 | 3076 | Would-have-been-blocked (audit mode telemetry) |
+| 3077 | File blocked by an enforced policy |
 | 3089 | Signature info for a correlated event |
+| 3095 | Refresh requires a reboot |
 | 3096 | No change in active CI policy |
-| 3099 ⭐ | Policy **refreshed and activated** |
+| 3097 | Policy refresh failed |
+| 3099 ⭐ | Policy loaded; correlate identity, version, and options |
+| 3100 | Refreshed policy failed activation |
 | 3102 | Policy refresh finished |
 | 3103 | Policy refresh ignored |
 | 3105 | Policy refresh in progress |
+| 8028 / 8029 | Script/MSI audit / enforcement decisions in AppLocker MSI and Script |
+| 8038 | Correlated script/MSI signature information |
 
 ### Rule Levels Available on Windows 11
 
@@ -366,9 +516,9 @@ With both values at `2`, the two numeric STIG checks are met on the tested PAW. 
 | **Publisher** | The code-signing certificate's Issuing CA + the publisher's common name | ✅ | Vendor is well-known and consistently signs their software (e.g., Adobe, Microsoft) |
 | **FilePublisher** | Publisher + specific filename + minimum version | ✅ | You want Publisher-level trust but scoped to a specific executable and version floor |
 | **SignedVersion** | Publisher + a minimum version number (allows all files from that publisher at or above that version) | ✅ | Vendor ships frequent updates; you want to allow future versions without a policy change |
-| **FileName** | The `OriginalFileName` attribute in the file's resource header (not the on-disk name) | ✅ | App is not well-signed but has a stable, predictable original filename across updates |
+| **FileName** | The `OriginalFileName` resource attribute by default, not the on-disk name or publisher identity | ✅ | Deliberately approved metadata-based trust; weaker authenticity than signer/hash rules |
 | **FilePath** | A specific file system path (user mode only — cannot allow kernel drivers) | ✅ (Win 10 1903+) | Trusted admin-only directories; runtime check enforces the path is not user-writable |
-| **Hash** | A unique cryptographic fingerprint of the exact binary | ✅ | Last resort only — every update changes the hash and requires a policy update |
+| **Hash** | A cryptographic fingerprint of the approved binary | ✅ | Precise trust for unsigned or fixed-version files; plan rule updates when content changes |
 | **PackagedFamilyName** | MSIX/AppX package family name | ✅ | Store apps or MSIX-packaged software |
 | **WHQLFilePublisher** | WHQL-certified driver publisher + filename + version | ✅ | Driver allowlisting with version floors |
 
@@ -379,7 +529,10 @@ With both values at `2`, the two numeric STIG checks are met on the tested PAW. 
 | Deploy App Control via Group Policy | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy |
 | App Control feature availability | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/feature-availability |
 | Path-based rules | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create |
-| Script Enforcement + PowerShell CLM | https://github.com/HotCakeX/Harden-Windows-Security/wiki/Script-Enforcement-and-PowerShell-Constrained-Language-Mode-in-WDAC-App-Control-Policies |
+| Script Enforcement + PowerShell CLM | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/script-enforcement |
+| Merge policies | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/merge-appcontrol-policies |
+| Multiple-policy format and supplemental policies | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/deploy-multiple-appcontrol-policies |
+| Remove policies and signed-policy prerequisites | https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/disable-appcontrol-policies |
 
 ---
 
@@ -389,28 +542,72 @@ This section consolidates operational gotchas and Advanced Options panel setting
 
 ### Operational Gotchas
 
-- 🔀 **Merge order matters:** When merging policies in the wizard, the **first policy selected is the primary/winner**. Always put your base policy first. Reversing this can corrupt the effective policy.
-- 🖥️ **One effective policy per endpoint:** Even with multiple GPO links across OUs, the endpoint enforces one effective WDAC policy. Plan accordingly.
-- 📡 **ISG must be off** for any disconnected/air-gapped environment. Leaving it on with no Internet will cause unexpected allow/block behavior.
-- 🥾 **Boot Audit on Failure** is hidden under Advanced Options and is **off by default**. Always enable it during initial testing phases to prevent an untested policy from hard-locking a system on reboot.
-- 🔧 **Managed Installer and MECM:** Managed Installer does not automatically register ConfigMgr as trusted in every deployment. You may need a re-deployment or a registry-key workaround to properly mark MECM as a trusted managed installer.
+- 🔀 **Merge order determines output identity:** Put the intended base first in the displayed table. Reversing inputs can produce the wrong identity/format; it is not inherently XML corruption or first-rule precedence.
+- 🖥️ **Windows 11 supports multiple policies:** Separate enforced bases generally intersect their allowlists; a base and its authorized supplementals expand that base's allowed set. Explicit denies still win. The built-in GPO deployment setting remains single-policy only.
+- 📡 **Offline versus connected profiles:** Disable ISG for the offline profile. The reviewed `10.0.5.9` variant enables it; test connectivity and authorization behavior separately rather than treating cloud reputation as an offline allowlist.
+- 🥾 **Boot Audit on Failure is limited:** It can switch the policy to audit when a boot-critical driver is blocked. It does not recover every application failure or guarantee both STIG enforcement fields remain `2`.
+- 🔧 **Managed Installer requires configuration:** Verify the AppLocker managed-installer designation and file origin tags. Do not use an unspecified registry workaround as a substitute for the documented deployment process.
 
-### 🐚 Script Enforcement + PowerShell Constrained Language Mode — Deep Dive
+### Alternative: Base plus Supplemental Policies
 
-This policy ships with `Disabled:Script Enforcement` — a deliberate PAW design decision. Here is the full picture of what this means and why:
+Use this route when separate application policies are a management requirement, not because event conversion forces it.
 
-**What script enforcement does when enabled:** WDAC enforces Constrained Language Mode (CLM) based on **script policy coverage, not caller identity**. Any script not explicitly covered by a policy allow rule runs in CLM regardless of who runs it — Domain Admin, SYSTEM, or standard user. Interactive PowerShell is also placed in CLM machine-wide whenever script enforcement is active on any UMCI policy, even if that policy is in audit mode. This means GPO startup scripts, admin `.ps1` tooling, and scheduled tasks running as SYSTEM are all equally subject to CLM if their scripts aren't covered by explicit policy allow rules.
+1. Plan a migration to **multiple-policy format** and a supported deployment method: CiTool/script, ConfigMgr, or the ApplicationControl CSP as appropriate. A GPO startup script can deliver the script-based workflow; that is different from the built-in **Deploy App Control for Business** setting.
+2. Create/validate a multiple-policy base with a stable unique `PolicyID` and matching `BasePolicyID`. Enable **Allow Supplemental Policies**. For signed bases, configure authorized supplemental signers and sign the supplemental as required.
+3. Deploy and verify that base before depending on a supplemental. Do not leave an old restrictive enforced base active accidentally; another base can still block the application.
+4. In **Policy Creator → Supplemental Policy**, select the intended compatible base. Add only the reviewed application rules. If using a separate event-derived input, merge it with the intended supplemental first in the merge table, then verify the resulting supplemental identity, base association, options, and rules.
+5. A supplemental has its **own** `PolicyID` and a `BasePolicyID` equal to the target base's `PolicyID`. It expands that base; it is not an independently auditable enforcement policy. Audit/UMCI behavior comes from the base; do not put unsupported base-only options in the supplemental.
+6. Compile and deploy each binary as `{PolicyID}.cip`, retain forward versions for each identity, and verify authorization and loading on the target. Supplemental allows do not override explicit denies.
 
-**What disabling it does:** Removes the WDAC-level script constraint entirely. PowerShell runs in Full Language Mode for anyone who can launch it; access control is handled at the OS privilege layer instead.
+For example, after the correctly named binary is prepared, an **intentional deployment action**, not a diagnostic, on a Windows 11 pilot is:
 
-**The net result in this lab:** Regular users cannot execute PowerShell (OS privilege control), Domain Admins can run scripts in Full Language Mode (WDAC not interfering). This is the correct posture for a PAW.
+```powershell
+& "$env:SystemRoot\System32\CiTool.exe" --update-policy 'C:\WDAC\Compiled\{YOUR-POLICY-GUID}.cip' -json
+if ($LASTEXITCODE -ne 0) { throw "CiTool deployment failed: $LASTEXITCODE" }
+```
+
+Replace the placeholder with the binary's verified policy GUID. New **signed base** deployments on memory-integrity-enabled systems require a restart under Microsoft's documented deployment caveat; do not assume every CiTool update is rebootless.
+
+See [Microsoft's multiple-policy guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/deploy-multiple-appcontrol-policies) and [script deployment guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-with-script). Do not silently reset the identity or rename a `.p7b` to `.cip` and call that a migration.
+
+### Recovery, Rollback, and Starting Over
+
+**Prefer a forward corrective revision to deleting an active policy.** For example, copy known-good rules into a new revision with the **same identity** and a version higher than the deployed version. Going from `10.0.5.9` to `10.0.5.10` is normal; changing the friendly name or date is not versioning. Do not count on a lower-version binary replacing a newer policy.
+
+Before enforcement, retain the editable XML and compiled binary, identities, current version, hash, GPO/source path, signer authorization where applicable, and a tested recovery plan. Confirm the policy permits the tools needed to repair it. Keep recovery access and BitLocker material outside the affected PAW.
+
+**Can you remove `SiPolicy.p7b` and start fresh? Yes, but not by deleting an arbitrary file and assuming enforcement is gone.**
+
+1. Inventory all loaded policies and confirm the exact custom policy ID, version, and actual signing state with CiTool and activation evidence. An XML option allowing unsigned policies is not a substitute for checking whether the deployed artifact is signed.
+2. Disable or retarget **every deployment source** for that policy before removal: GPO, startup scripts, ConfigMgr, MDM, or another agent. Otherwise it can return. Allow the updated management settings to reach the target.
+3. **Unsigned custom policy:** use the supported policy-specific removal procedure. Windows 11 25H2 supports CiTool removal of unsigned policies without requiring a restart, but verify the result and any remaining copies/deployment sources. A restart remains useful in a controlled reset test.
+4. **Signed base policy:** first deploy an authorized **signed replacement** with the same policy ID, an equal-or-higher version, `Enabled:Unsigned System Integrity Policy`, and the required `UpdatePolicySigners`. Sign it with a certificate authorized by the existing policy. **Restart before removal** to deactivate the UEFI protection. Skipping this sequence can cause a boot failure. Signed supplemental removal follows the unsigned-policy removal process.
+5. Remove only the verified custom identity. The following is **destructive policy administration**, not a troubleshooting query:
+
+   ```powershell
+   & "$env:SystemRoot\System32\CiTool.exe" -rp '{YOUR-VERIFIED-CUSTOM-POLICY-GUID}' -json
+   if ($LASTEXITCODE -ne 0) { throw "CiTool policy removal failed: $LASTEXITCODE" }
+   ```
+
+6. Re-inventory policies and verify the removed identity is no longer active. If file-based cleanup is required, follow Microsoft's OS/EFI procedure for that exact policy: a legacy policy can have `SiPolicy.p7b` copies in both locations, and corresponding `.cip` files may also exist. **Never delete the entire CodeIntegrity directory or Microsoft platform policies.**
+7. For a genuinely fresh design, create and pilot a new audit policy using the deliberately selected deployment model. Re-enable deployment only for that validated artifact. Replacing a policy in place should preserve identity and move the version forward; a new identity is a separate policy, not an update.
+
+The number of past enforcement revisions does not itself prevent a reset. The important state is **what is active now, who can update/remove it, which versions are deployed, and what will redeploy it**. A fully removed policy does not require resetting a friendly version string to `1.0.0.0`; keep an auditable version history. See [Microsoft's removal and boot-recovery procedure](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/disable-appcontrol-policies).
+
+### Script Enforcement and PowerShell Constrained Language Mode
+
+The supplied policies use `Disabled:Script Enforcement` for lab compatibility. Treat this as a documented exception with compensating controls, not proof that script enforcement is unsuitable for every PAW.
+
+**With script enforcement:** script/module trust, not administrator identity, determines Full Language eligibility. Unapproved PowerShell scripts can run in Constrained Language Mode rather than being stopped entirely. Microsoft documents that interactive PowerShell enters CLM when **any UMCI policy is enforced and any active App Control policy enables script enforcement**, even if the latter is in audit mode. To run interactive PowerShell with Full Language rights, script enforcement must be disabled for all applicable App Control policies; other application-control mechanisms can also affect language mode.
+
+**With this option disabled:** App Control's script-enforcement restrictions are reduced, but other policies/controls can still affect behavior, and COM enforcement is separate. This option does not establish a Domain Admin-only PowerShell exemption or prevent standard users from launching PowerShell. Implement and verify any such user-access control separately.
 
 **Verify the active language mode at any time:**
 ```powershell
 $ExecutionContext.SessionState.LanguageMode
-# FullLanguage  → script enforcement is OFF (expected with this policy)
-# ConstrainedLanguage → script enforcement is ON
 ```
+
+This is the current session's state, not a definitive inventory of every active enforcement mechanism. Test startup scripts, modules and dependent modules, scheduled tasks, and interactive sessions under their intended accounts. See [Microsoft's script-host behavior](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/script-enforcement).
 
 ### Advanced Options Panel — Setting-by-Setting Analysis
 
@@ -420,17 +617,19 @@ The following settings appear in the wizard's Advanced Options panel or on the m
 
 | Setting | Recommendation | Reason |
 |---|---|---|
-| Treat Revoked as Unsigned | ✅ Leave **OFF** | Legacy cert chains in gov environments |
+| Treat Revoked as Unsigned | Review explicitly; **OFF in the example** | Changes how affected signatures are treated; not a generic old-certificate exception |
 | Disable Runtime Filepath Rules | ✅ Leave **OFF** | Keeping it OFF means the runtime path protection is ON |
 | Dynamic Code Security | ⚠️ Leave **OFF** for now | No audit mode — enforce-only, high break risk |
-| Invalidate EAs on Reboot | ✅ Leave **OFF** | ISG is disabled, this setting has no effect |
-| Require EV Signers | ✅ Leave **OFF** | Older drivers lack EV certs, boot risk |
+| Invalidate EAs on Reboot | **OFF in the offline profile** | Relevant to ISG; review separately for the connected variant |
+| Require EV Signers | Do not depend on it | Microsoft lists the option as unsupported |
 
 ---
 
-#### Treat Revoked as Unsigned — ✅ Leave OFF
+#### Treat Revoked as Unsigned — Review the Actual Signature Failure
 
-Treats binaries signed with revoked certificates as unsigned. In government and DoD environments you will frequently encounter legacy software with expired or revoked cert chains (Axway/Tumbleweed is a real-world example). On a PAW where the binary allowlist is already the primary enforcement control, the risk of silently breaking legitimate legacy tools outweighs the marginal security gain from this setting.
+Option 20, `Enabled:Revoked Expired As Unsigned`, treats revoked signatures, and expired signatures with the **Lifetime Signing EKU**, as unsigned under the documented enterprise-signing scenarios. Ordinary expiration, revocation, and invalid trust chains are not interchangeable.
+
+Do not justify leaving it off simply because a government application is old. Inspect 3033/3034 and 3089 signature details. Where an approved exception is necessary, assess whether treating the signature as unsigned plus a precise non-certificate allow rule is appropriate. Retain the example's setting only as an explicit, tested decision. See [policy rule options](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create) and [signature failure events](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-id-explanations).
 
 ---
 
@@ -448,19 +647,19 @@ Extends WDAC enforcement to .NET assemblies and dynamically loaded code. Valuabl
 
 #### Invalidate EAs on Reboot — ✅ Leave OFF
 
-This setting only has an effect when **Intelligent Security Graph (ISG)** is enabled — it forces ISG-authorized files to be revalidated against Microsoft's cloud reputation service on each reboot. Since this policy has ISG **disabled** (disconnected / no Internet environment), this toggle has no functional effect in either state. Leave it OFF.
+This option causes periodic revalidation of ISG-origin authorization. It has no ISG authorization to revalidate in the offline profile where ISG is disabled. The later `10.0.5.9` artifact enables ISG, so evaluate revalidation and connectivity as part of that distinct profile rather than applying the offline rationale to it.
 
 ---
 
-#### Require EV Signers — ✅ Leave OFF
+#### Require EV Signers — Unsupported Option
 
-Requires all drivers to carry **Extended Validation (EV) certificates**. Many older drivers — including common enterprise and government tooling — were signed with standard code signing certificates that predate the EV requirement. Enabling this without a complete driver inventory is a credible path to a boot failure. Leave it OFF unless you have audited every driver on the PAW and confirmed full EV coverage.
+Microsoft currently lists `Required:EV Signers` (option 8) as **not supported**. Do not describe the toggle as an effective all-driver EV requirement or rely on it as a hardening control. **Required:WHQL** is a different option and is enabled in the supplied policies; validate that requirement against actual drivers.
 
 ---
 
 ## 7. 🖥️ Virtualization Based Security (VBS) & HVCI — Hyper-V Lab Setup
 
-VBS and HVCI are complementary to WDAC and are typically configured as part of the same PAW hardening effort. WDAC governs what can run; HVCI ensures those enforcement decisions cannot be subverted at the kernel level. This section covers enabling both in a Hyper-V lab environment.
+VBS and HVCI complement WDAC and are typically configured as part of PAW hardening. WDAC defines what can run; HVCI strengthens kernel code-integrity enforcement using virtualization-based isolation. These are defense-in-depth controls, not a guarantee against every kernel compromise.
 
 Enabling VBS and HVCI on a Hyper-V guest requires configuration at two layers — the **host** (to expose virtualization extensions to the VM) and the **guest** (to configure and activate the VBS stack via GPO).
 
@@ -476,7 +675,7 @@ Enabling VBS and HVCI on a Hyper-V guest requires configuration at two layers �
 Set-VMProcessor -VMName "YourVMName" -ExposeVirtualizationExtensions $true
 ```
 
-**Step 2 — Disable dynamic memory** (incompatible with VBS):
+**Step 2 — Use static memory for this nested-virtualization lab:**
 ```powershell
 Set-VMMemory -VMName "YourVMName" -DynamicMemoryEnabled $false
 ```
@@ -509,7 +708,7 @@ Computer Configuration → Administrative Templates → System → Device Guard
 | Credential Guard Configuration | Enabled without UEFI lock |
 
 > [!IMPORTANT]
-> **Consider UEFI lock for production PAWs.** Enabling with UEFI lock writes the VBS configuration into firmware, meaning it cannot be disabled via software, Group Policy, or even a compromised OS. This is the right choice for a production PAW precisely because it prevents an attacker with SYSTEM or Domain Admin access from turning off Credential Guard or HVCI to facilitate credential theft or kernel exploitation. Without the lock, a sufficiently privileged attacker could simply GPO or registry their way around it.
+> **Evaluate UEFI lock before production deployment.** Firmware-backed configuration resists ordinary remote/OS-level disabling, but the exact protection and removal procedure depend on the feature. Test the supported physical-presence/recovery process and retain BitLocker recovery material. Do not treat a lock as irreversible or proof that every privileged attack is prevented. Lab examples use no UEFI lock to preserve recoverability.
 
 **Step 3 — Apply and reboot:**
 ```
@@ -524,15 +723,17 @@ Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\D
 
 ---
 
-### Before / After — Expected State Change
+### Before / After — Interpret Observed State, Not Just GPO Intent
 
 | Property | Before | After | Meaning |
 |---|---|---|---|
 | `VirtualizationBasedSecurityStatus` | `2` | `2` | ✅ VBS running at both stages |
-| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | ✅ Now requires Secure Boot (1) + DMA Protection (2) |
+| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | Requires base virtualization support (1) + Secure Boot (2); does **not** establish DMA protection (3) |
 | `SecurityServicesConfigured` | `{0}` | `{1, 2}` | ✅ Credential Guard (1) + HVCI (2) configured |
 | `SecurityServicesRunning` | `{1}` | `{1, 2}` | ✅ Both Credential Guard (1) and HVCI (2) now running |
-| `SecurityFeaturesEnabled` | `{0}` | `{0}` | GPO-driven — reflects firmware-level features, expected |
+| `SecurityFeaturesEnabled` | `{0}` | `{0}` | Do not infer a VBS/HVCI pass from this value alone; use the documented running/configured properties |
+
+These are historical observations, not guaranteed outputs for every VM. If the GPO requires DMA protection, confirm the supported platform and required/running posture; a `{1, 2}` result is not evidence of DMA protection.
 
 **Value decode for `SecurityServicesRunning` / `SecurityServicesConfigured`:**
 | Value | Service |
@@ -543,20 +744,21 @@ Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\D
 **Value decode for `RequiredSecurityProperties`:**
 | Value | Property |
 |---|---|
-| `1` | Secure Boot |
-| `2` | DMA Protection |
+| `1` | Base virtualization support |
+| `2` | Secure Boot |
+| `3` | DMA protection |
 
 ---
 
 ### What This Posture Provides
 
-**Credential Guard** isolates LSASS into a VBS-protected enclave, preventing credential material (NTLM hashes, Kerberos tickets) from being read by tools like Mimikatz even with SYSTEM-level access. On a PAW this is critical — admin credentials are high-value targets.
+**Credential Guard** isolates supported credential secrets using VBS, reducing exposure to credential dumping from the ordinary OS. It does not protect every credential type or prevent every credential-theft technique; administrator credentials remain high-value targets.
 
-**HVCI (Hypervisor-Protected Code Integrity)** enforces kernel code integrity from the hypervisor layer, sitting below the OS. It prevents unsigned or malicious code from being injected into the kernel, and it strengthens WDAC enforcement by making it significantly harder to bypass — the hypervisor validates kernel code integrity independent of the OS itself.
+**HVCI (Hypervisor-Protected Code Integrity)** uses a VBS-isolated environment for kernel code-integrity checks and enforces restrictions on executable kernel memory. It strengthens the boundary but does not make every signed driver safe; vulnerable-driver controls and driver testing still matter.
 
 Together they form the hardware-backed security baseline that makes a PAW meaningfully resistant to credential theft and kernel-level attacks, not just application-layer controls.
 
-> 💡 **Combined with WDAC:** HVCI and WDAC are complementary controls. WDAC governs what can run in user mode and kernel mode. HVCI ensures those enforcement decisions cannot be subverted by kernel-level attackers. Running both is the recommended PAW posture.
+> 💡 **Combined with WDAC:** WDAC restricts authorized code while HVCI strengthens kernel enforcement. Verify both independently rather than treating either one's configured state as proof of the other's operation.
 
 ---
 
@@ -567,3 +769,321 @@ Together they form the hardware-backed security baseline that makes a PAW meanin
 | Application Control for Business Wizard | https://webapp-wdac-wizard.azurewebsites.net |
 | Virtualization Based Security | https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs |
 | Configure Credential Guard | https://learn.microsoft.com/en-us/windows/security/identity-protection/credential-guard/configure |
+| Device Guard hardware property values | https://learn.microsoft.com/en-us/dotnet/api/microsoft.powershell.commands.deviceguardhardwaresecure |
+
+---
+
+## 8. Diagnostics and Troubleshooting
+
+Use three separate checks: **what the source XML configures**, **which policy the PAW has loaded**, and **what happened when an application ran**. None of these checks replaces the other two.
+
+### Troubleshooting Order
+
+| Symptom | Check first | Follow-through |
+|---|---|---|
+| New rules appear to have no effect | Source version/options, GPO source path, binary hash, CiTool inventory, 3099 details | Confirm the intended revision loaded; investigate 3095/3097/3100 before changing rules again |
+| Old 3076s still appear | Recorded post-activation time boundary and event policy ID | Historical records persist; reproduce the workload and examine only fresh events from the intended policy |
+| Fresh 3076/3077 for an approved application | Exact file/component, policy ID, 3089 signature details, explicit denies | Check DLLs/drivers and update-specific hashes; another enforced base may still block |
+| Supplemental exists on disk but does not extend trust | Base option 17, policy format, BasePolicyID, signer authorization, CiTool authorization | Confirm supported deployment and loading; existence on disk is insufficient |
+| GPO looks applied but the wrong policy runs | Resultant GPO path and competing deployment sources | Verify the actual endpoint binary and activation; do not equate `gpupdate` with loading |
+| MSI starts but fails later | AppLocker MSI/Script events plus CodeIntegrity 3077 for extracted DLLs | Installer publisher trust does not automatically authorize unsigned custom-action DLLs |
+| PowerShell behaves differently by session/script | Host/version, current LanguageMode, script/module trust, all active policies | Do not infer a Domain Admin exemption or the whole policy state from one session |
+
+> [!IMPORTANT]
+> These commands inspect configuration; they do not merge, deploy, refresh, or remove policies.
+>
+> - Run the ConfigCI examples in **Windows PowerShell 5.1** on the authoring workstation. PowerShell 7 compatibility remoting can change how ConfigCI collections are returned.
+> - Run endpoint checks in an **elevated session on the target PAW**, not just on the workstation running the Wizard.
+> - Replace the example `C:\WDAC\...` paths with your actual files.
+> - `Get-CIPolicy` and `Get-CIPolicyIdInfo` inspect **source XML**. Do not pass a compiled `.p7b` or `.cip` file to them or assume they report the active endpoint policy.
+
+### Inspect the Source XML: Identity, Version, and Rule Options
+
+Confirm the commands are available, then select the editable source XML associated with the policy binary you are investigating:
+
+```powershell
+Get-Command Get-CIPolicy, Get-CIPolicyIdInfo -ErrorAction Stop
+$PolicyXml = 'C:\WDAC\Source\YourPolicy.xml'
+
+Get-CIPolicyIdInfo -FilePath $PolicyXml -ErrorAction Stop |
+    Select-Object ValueName, Value |
+    Format-Table -AutoSize
+```
+
+`Get-CIPolicyIdInfo` reports the friendly PolicyInfo name and identifier. A date-like identifier such as `2026-03-27v3` is **not** the multiple-policy GUID and does not set `VersionEx`.
+
+Read the XML's actual identity fields and configured options:
+
+```powershell
+[xml]$PolicyDocument = Get-Content -LiteralPath $PolicyXml -Raw -ErrorAction Stop
+$RuleOptions = @($PolicyDocument.SiPolicy.Rules.Rule.Option)
+
+[pscustomobject]@{
+    VersionEx = $PolicyDocument.SiPolicy.VersionEx
+    PolicyID = $PolicyDocument.SiPolicy.PolicyID
+    BasePolicyID = $PolicyDocument.SiPolicy.BasePolicyID
+    LegacyPolicyTypeID = $PolicyDocument.SiPolicy.PolicyTypeID
+    AuditModeConfigured = $RuleOptions -contains 'Enabled:Audit Mode'
+    UMCIConfigured = $RuleOptions -contains 'Enabled:UMCI'
+    SupplementalPoliciesAllowed = $RuleOptions -contains 'Enabled:Allow Supplemental Policies'
+    ISGConfigured = $RuleOptions -contains 'Enabled:Intelligent Security Graph Authorization'
+} | Format-List
+
+$RuleOptions | Sort-Object
+```
+
+**Interpretation:**
+
+- `AuditModeConfigured = True` means this XML requests audit mode. `False` means it requests enforcement; it does not prove that this file is deployed.
+- Legacy authoring XML uses `PolicyTypeID`; empty `PolicyID` and `BasePolicyID` fields are expected in that layout. Do not mistake `PolicyTypeID` for a unique modern policy identity.
+- In multiple-policy format, a base has matching `PolicyID` and `BasePolicyID` values. A supplemental policy has its own `PolicyID` and a `BasePolicyID` identifying the base it expands.
+- Allowing supplemental policies is a configuration prerequisite, not proof that a supplemental policy is correctly associated, deployed, or active. Signed bases also require the appropriate supplemental signer authorization.
+- Check the complete option list for Managed Installer, WHQL, script enforcement, and other settings. A filename containing `Enforce`, `UMCI`, or `AllowSupplemental` is not evidence of those settings.
+
+### Inspect Allow and Deny Rules with Get-CIPolicy
+
+```powershell
+$Rules = Get-CIPolicy -FilePath $PolicyXml -ErrorAction Stop
+
+$Rules |
+    Group-Object TypeId |
+    Select-Object Name, Count |
+    Format-Table -AutoSize
+
+$Rules |
+    Where-Object { $_.TypeId -eq 'Deny' } |
+    Select-Object -First 25 Name, Id, TypeId, UserMode |
+    Format-Table -AutoSize
+
+$Rules |
+    Where-Object { $_.Name -match 'WSL|Docker|7-Zip' } |
+    Select-Object Name, Id, TypeId, UserMode |
+    Format-Table -AutoSize
+```
+
+The last query searches rule names for convenience; it is **not** a complete rule evaluator. A missing name match does not prove the application is untrusted, and a matching rule does not prove it will run. Inspect signer/file-attribute references and explicit denies, then test the actual application. Merging an allow rule or deploying a supplemental allow does not override an explicit deny.
+
+### Identify Policies on the Target PAW with CiTool
+
+On Windows 11 25H2, use the built-in CiTool from an elevated session:
+
+```powershell
+$PolicyInventoryJson = & "$env:SystemRoot\System32\CiTool.exe" -lp -json
+if ($LASTEXITCODE -ne 0) {
+    throw "CiTool policy inventory failed with exit code $LASTEXITCODE. Check elevation. Output: $PolicyInventoryJson"
+}
+
+($PolicyInventoryJson | ConvertFrom-Json -ErrorAction Stop).Policies |
+    Format-List *
+```
+
+Review the policy ID, base policy ID, friendly name, version, authorization, and active/enforcement indicators. Preserve the full output when troubleshooting; filtering only on a friendly name can hide other policies that affect the result. CiTool may display the version as a packed integer rather than the dotted `VersionEx` string.
+
+For a numeric packed version, decode the four 16-bit components if needed:
+
+```powershell
+$PackedVersion = [uint64](Read-Host 'Paste the numeric Version reported by CiTool')
+'{0}.{1}.{2}.{3}' -f (($PackedVersion -shr 48) -band 0xFFFF),
+    (($PackedVersion -shr 32) -band 0xFFFF),
+    (($PackedVersion -shr 16) -band 0xFFFF),
+    ($PackedVersion -band 0xFFFF)
+```
+
+Correlate this inventory with the intended source XML and activation events. A file on disk, a familiar friendly name, or a single inventory flag does not by itself establish the intended audit/enforce behavior. Leave Microsoft platform policies alone.
+
+### Inspect Deployed Files, Binary Hashes, and GPO Application
+
+These are **different deployment layouts**:
+
+| Deployment layout | Expected policy location |
+|---|---|
+| Legacy single-policy deployment | `C:\Windows\System32\CodeIntegrity\SiPolicy.p7b` |
+| Multiple-policy deployment | `C:\Windows\System32\CodeIntegrity\CiPolicies\Active\{PolicyID}.cip` |
+
+The built-in **Deploy App Control for Business** GPO setting supports single-policy format only. A GPO-delivered script that deploys multiple-policy files is a different deployment workflow.
+
+```powershell
+Get-ChildItem -LiteralPath "$env:SystemRoot\System32\CodeIntegrity" -Filter '*.p7b' -File -ErrorAction Stop |
+    Select-Object Name, Length, LastWriteTime
+
+Get-ChildItem -LiteralPath "$env:SystemRoot\System32\CodeIntegrity\CiPolicies\Active" -Filter '*.cip' -File -ErrorAction Stop |
+    Select-Object Name, Length, LastWriteTime
+
+gpresult /r /scope computer
+if ($LASTEXITCODE -ne 0) {
+    throw "Computer-scope GPO reporting failed with exit code $LASTEXITCODE."
+}
+
+Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard' -ErrorAction Stop |
+    Select-Object DeployConfigCIPolicy, ConfigCIPolicyFilePath |
+    Format-List
+```
+
+A missing directory/registry key, empty listing, or GPO listed by `gpresult` is not sufficient to determine policy activation. Use CiTool and event evidence as well. `DeployConfigCIPolicy = 1` plus `ConfigCIPolicyFilePath` identifies this built-in GPO setting's configured source, not every other policy deployment method.
+
+To fingerprint a particular compiled artifact:
+
+```powershell
+$PolicyBinary = 'C:\WDAC\Compiled\YourPolicy.p7b'
+Get-FileHash -LiteralPath $PolicyBinary -Algorithm SHA256 -ErrorAction Stop |
+    Format-List Algorithm, Hash, Path
+```
+
+Compare the deployment-source binary with the corresponding endpoint binary when verifying distribution. Do not compare an XML hash with a binary hash; matching binary hashes establish byte identity, not activation or correctness of the allowlist.
+
+### Check Effective CI/UMCI Status and the Current PowerShell Session
+
+```powershell
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard -ErrorAction Stop |
+    Select-Object CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus |
+    Format-List
+
+$PSVersionTable.PSVersion
+$ExecutionContext.SessionState.LanguageMode
+```
+
+For each CI/UMCI status, `0` means not configured, `1` means audit, and `2` means enforced. Both must be `2` for the two numeric STIG checks described in Section 1; the values do not identify the policy or approve its rules.
+
+`LanguageMode` describes **this PowerShell session**. `FullLanguage` alone does not prove App Control is disabled or establish script behavior for every host, script, or active policy.
+
+### Query Activation, Audit, and Block Events Separately
+
+Run these queries on the PAW where you reproduced the behavior. Set the start time to cover the deployment and test:
+
+```powershell
+$Since = (Get-Date).AddDays(-1)
+
+$ActivationEvents = @(Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3095, 3096, 3097, 3099, 3100, 3102, 3103
+    StartTime = $Since
+} -MaxEvents 20 -ErrorAction Stop)
+
+$ActivationEvents |
+    Select-Object TimeCreated, Id, Message |
+    Format-List
+```
+
+**3099** indicates a policy loaded; inspect its Details/XML for policy identity and options. **3095** indicates a reboot is required for the refresh, **3097** indicates refresh failure, and **3100** indicates unsuccessful activation. A refresh-finished event alone is not proof of successful activation.
+
+To view the structured data for the most recent retained 3099 in that time window:
+
+```powershell
+$LoadedEvent = Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3099
+    StartTime = $Since
+} -MaxEvents 1 -ErrorAction Stop
+
+$LoadedEvent.ToXml()
+```
+
+The most recent 3099 may belong to another policy. Match the identity and deployment time, rather than accepting the event ID alone.
+
+To decode selected **3099 Options bit addresses** after choosing the correct event:
+
+```powershell
+$OptionsHex = Read-Host 'Paste the Options hexadecimal value from the matching 3099 event'
+$OptionsValue = [Convert]::ToUInt32(($OptionsHex -replace '^0x', ''), 16)
+[pscustomobject]@{
+    UMCI = ($OptionsValue -band (1 -shl 2)) -ne 0
+    ISG = ($OptionsValue -band (1 -shl 4)) -ne 0
+    AllowSupplementalPolicies = ($OptionsValue -band (1 -shl 10)) -ne 0
+    AuditMode = ($OptionsValue -band (1 -shl 16)) -ne 0
+} | Format-List
+```
+
+These are event **bit addresses**, not the numeric `Set-RuleOption` indices. For example, Audit Mode is option 3 but event bit 16. See [Microsoft's activation event option mapping](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-tag-explanations#policy-activation-event-options).
+
+For executable, DLL, and driver decisions:
+
+```powershell
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3076, 3077, 3089
+    StartTime = $Since
+} -MaxEvents 50 -ErrorAction Stop |
+    Select-Object TimeCreated, Id, Message |
+    Format-List
+```
+
+- **3076:** the file would have been blocked by an audit policy. Review whether it should be approved; do not automatically allow everything logged.
+- **3077:** an enforced policy blocked the file.
+- **3089:** associated signature information; correlate it using the event's System/Correlation ActivityID.
+
+For MSI and script decisions on Windows 11:
+
+```powershell
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-AppLocker/MSI and Script'
+    Id = 8028, 8029, 8038
+    StartTime = $Since
+} -MaxEvents 50 -ErrorAction Stop |
+    Select-Object TimeCreated, Id, Message |
+    Format-List
+```
+
+**8028** is an audit decision, **8029** is an enforcement decision, and **8038** provides correlated signature information. Script hosts control the final behavior: an 8029 does not always mean the script stopped entirely; PowerShell can run an unapproved script in Constrained Language Mode. These AppLocker MSI/Script events are not available on Windows Server Core.
+
+Filtering happens at the event source, before `-MaxEvents` limits the results. If PowerShell reports **no events found**, that means no retained records matched the query; it does not prove successful activation, application approval, or compliance. Check the time range, log retention, target computer, and whether the workload actually ran.
+
+If the Wizard runs on a different computer, export the PAW's relevant logs and parse those exported logs. Parsing the authoring workstation's local Event Viewer does not collect the PAW's telemetry.
+
+### Inspect Fresh Audit Events by Policy
+
+Set `$AuditRoundStart` after verifying activation and **before** the workload run, as in Step 4. If using a new session, restore the timestamp you recorded rather than using the current time:
+
+```powershell
+$AuditRoundStart = [datetimeoffset]::Parse(
+    (Read-Host 'Paste the recorded audit-round start timestamp, including offset')
+).LocalDateTime
+$ExpectedPolicyId = [guid](Read-Host 'Paste the intended policy GUID verified with CiTool')
+```
+
+Then query the PAW. This example reads named fields rather than relying on an event Properties index:
+
+```powershell
+$FreshAuditEvents = @(Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3076
+    StartTime = $AuditRoundStart
+} -ErrorAction Stop)
+
+$AuditRows = @(
+    foreach ($Event in $FreshAuditEvents) {
+        [xml]$EventXml = $Event.ToXml()
+        $Fields = @{}
+        foreach ($Field in $EventXml.Event.EventData.Data) {
+            $Fields[[string]$Field.Name] = $Field.InnerText
+        }
+        if (-not $Fields.ContainsKey('PolicyID')) {
+            Write-Warning "Event record $($Event.RecordId) has no PolicyID field. Inspect its XML manually; it has not been attributed to the intended policy."
+            continue
+        }
+        [pscustomobject]@{
+            TimeCreated = $Event.TimeCreated
+            RecordId = $Event.RecordId
+            PolicyID = [guid]$Fields['PolicyID']
+            FileName = $Fields['FileName']
+            Message = $Event.Message
+        }
+    }
+)
+
+$AuditRows |
+    Where-Object { $_.PolicyID -eq $ExpectedPolicyId } |
+    Select-Object TimeCreated, RecordId, PolicyID, FileName, Message |
+    Format-List
+```
+
+Do not use absence of displayed rows as a pass without confirming the query completed, no records were left unattributed, and the workload ran. Events from other policy IDs explain why a file can still produce an audit record after the intended base was updated. If a fresh event remains for the updated identity, inspect its exact file, rule coverage, signature, denies, and actual loaded version.
+
+### Diagnostic References
+
+- [Get-CIPolicy](https://learn.microsoft.com/en-us/powershell/module/configci/get-cipolicy)
+- [Get-CIPolicyIdInfo](https://learn.microsoft.com/en-us/powershell/module/configci/get-cipolicyidinfo)
+- [CiTool commands and output](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/citool-commands)
+- [App Control event explanations](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-id-explanations)
+- [Group Policy deployment limitations](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy)
+- [Activation event option-bit mapping](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-tag-explanations#policy-activation-event-options)
+- [Supported policy removal and recovery](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/disable-appcontrol-policies)

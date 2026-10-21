@@ -21,6 +21,9 @@ The final fix keeps UMCI enabled and adds a targeted supplemental WDAC policy fo
 > [!IMPORTANT]
 > We did **not** leave DLL/user-mode enforcement disabled. UMCI was restored in a forward base policy revision, `10.0.5.9`.
 
+> [!NOTE]
+> This is a historical lab record, not evidence of the current endpoint state. Microsoft's built-in **Deploy App Control for Business** GPO setting supports single-policy format only; it does not deploy a base-plus-supplemental policy set. The `.cip` registration below was a separate local CiTool action. For a reproducible supported design, choose either the [single merged-policy GPO workflow](../README.md#choose-the-policy-management-model-first) or a deliberately planned [multiple-policy deployment](../README.md#alternative-base-plus-supplemental-policies). Verify actual identities, format, signing, and activation rather than inferring them from extensions or this reserved legacy GUID. See [current diagnostic procedures](../README.md#8-diagnostics-and-troubleshooting).
+
 ## Active WDAC State
 
 ### Base WDAC Policy
@@ -116,10 +119,10 @@ The base policy was revised to include:
 <Option>Enabled:Allow Supplemental Policies</Option>
 ```
 
-That produced a base policy revision that allowed add-on `.cip` policies to supplement the GPO-delivered base `.p7b`.
+That produced the revised base used in this lab's subsequent local `.cip` registration tests. Option 17 alone is not a complete supplemental deployment procedure; policy format, base association, signing authorization, and actual loading must also be verified.
 
 > [!IMPORTANT]
-> The base policy must have `Enabled:Allow Supplemental Policies`; otherwise, supplemental `.cip` files may exist on disk but will not be authorized by the base policy.
+> The base policy must have `Enabled:Allow Supplemental Policies`; otherwise, supplemental `.cip` files may exist on disk but will not be authorized by the base policy. This option is **not required** when event-derived rules are merged into a single updated base instead.
 
 ### 2. Built an OpenJS Publisher Supplemental Policy
 
@@ -200,7 +203,7 @@ The custom-action supplemental policy:
 - Publisher-allows WiX Toolset custom-action helper DLLs.
 - Supplements base policy `{A244370E-44C9-4C06-B551-F6016E563076}`.
 
-## How the GPO `.p7b` and Supplemental `.cip` Work Together
+## Observed Lab: GPO Base and Separate Local Supplemental Registration
 
 ### Base `.p7b` via Server 2025 Network Share
 
@@ -220,7 +223,7 @@ When `DeployConfigCIPolicy = 1`, the client applies the `.p7b` policy from the n
 
 ### Why the New `.cip` Is Authorized
 
-The supplemental `.cip` is not trusted just because it exists. It is authorized because:
+The lab recorded authorization after the following configuration and registration steps. Do not generalize these observations into support for multiple-policy delivery by the built-in GPO setting:
 
 1. The active base `.p7b` contains `Enabled:Allow Supplemental Policies`.
 2. The supplemental policy has this base reference:
