@@ -7,7 +7,7 @@
 > &nbsp;&nbsp;• Lab domain `skynet-home.local`  
 > &nbsp;&nbsp;• App Control Policy Wizard 2.7  
 > **Primary walkthrough:** One merged, unsigned, single-policy-format policy delivered by the built-in Group Policy setting<br>
-> **Primary connectivity profile:** Fully offline / disconnected — no ISG / cloud reputation<br>
+> **Primary connectivity profile:** No Internet and no ISG / cloud reputation. PAWs stay domain-joined and receive policy through Group Policy and a UNC share — this is not an air-gapped or fully disconnected deployment.<br>
 > **Primary driver:** DISA STIG — two CAT II findings on Privileged Access Workstations (PAWs)  
 > **Historical POC XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — retained as the original enforce-mode example, not the latest policy<br>
 > **Later policy reviewed:** Version `10.0.5.9`, with ISG, UMCI, and supplemental support enabled; see the profile distinction below. Its binary and authoring XML are not included in this repository.
@@ -24,11 +24,13 @@ Before touching the wizard, understand what you are satisfying.
 
 > *The Windows PAW must have a WDAC / Code Integrity policy deployed and active to restrict which applications can run on the system.*
 
-**Check (PowerShell):**
+**Check (elevated PowerShell):**
 ```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run the STIG check in an elevated PowerShell session (Run as administrator)." }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *codeintegrity*
 ```
-`CodeIntegrityPolicyEnforcementStatus` must be **2** (Enforced). This field reports the effective Code Integrity policy status on the PAW. A value of `1` is Audit and remains a finding.
+Run this on the PAW as administrator. The published STIG check requires an elevated session; do not record a result from a non-elevated window. `CodeIntegrityPolicyEnforcementStatus` must be **2** (Enforced). This field reports the effective Code Integrity policy status on the PAW. A value of `1` is Audit and remains a finding.
 
 ### V-243451 / WPAW-00-001060 — CAT II · Device Guard User Mode Code Integrity (UMCI)
 
@@ -62,7 +64,7 @@ Both values must return `2` on the target PAW. A policy XML file, GPO link, or E
 - **WDAC / App Control Policy Wizard 2.7** installed on the admin workstation
 - **MECM / ConfigMgr:** Enable Managed Installer only when the deployment agent is designated through the appropriate AppLocker managed-installer configuration and file tagging has been verified. Installing ConfigMgr or enabling the WDAC option alone does not establish trust. Existing applications may need redeployment through the configured installer to acquire origin tags; use explicit rules where appropriate. See [Microsoft's Managed Installer guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/configure-authorized-apps-deployed-with-a-managed-installer).
 - Group Policy infrastructure available (domain-joined PAWs in a dedicated OU — `Workstation` in this lab)
-- **No Internet access in the primary profile** → keep **Intelligent Security Graph (ISG) disabled**; do not depend on cloud reputation for offline authorization.
+- **No Internet access in the primary profile** → keep **Intelligent Security Graph (ISG) disabled**; do not depend on cloud reputation for authorization. In this guide, "offline" means no Internet, not disconnected from the domain. The walkthrough still requires domain join, Group Policy, and a readable UNC share.
 - Windows PowerShell 5.1 with ConfigCI on the authoring workstation; use an elevated session on the target PAW for endpoint diagnostics.
 - `CiTool.exe` is built into Windows 11 25H2. `RefreshPolicy.exe` is an optional Microsoft refresh tool; neither replaces verification of activation.
 - Admin rights on the PAW being tested
@@ -77,6 +79,9 @@ Both values must return `2` on the target PAW. A policy XML file, GPO link, or E
 |---|---|---|
 | Add approved event-derived rules to one existing base | **Not required** | Merge the XML files, compile, and redeploy the updated base. This is the primary GPO walkthrough below. |
 | Maintain separately deployed supplemental policies | **Required on the base**, plus correct association/signing | Use the multiple-policy workflow described in [Section 6](#alternative-base-plus-supplemental-policies). The built-in App Control GPO setting does not deploy a multiple-policy set. |
+
+> [!IMPORTANT]
+> **Windows 11 and this GPO setting.** Microsoft documents that **Deploy App Control for Business** supports only the single-policy format, and [recommends an alternative deployment method](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy) — script, ConfigMgr, or the ApplicationControl CSP — on Windows 10 1903 and later and on Windows 11. This walkthrough still uses that setting because the primary policy is one unsigned, single-policy-format file (`SiPolicy.p7b`). Do not use it to deploy a multiple-policy set. New **signed** base policies on systems with memory integrity should be activated with a reboot through the script method. That known issue does not apply to this unsigned primary path, or to an update of a signed base that is already active.
 
 You can enable supplemental support later by updating and redeploying a compatible base. You do **not** need to recreate an audit base merely because option 17 was originally off, and option 17 does **not** need to be enabled just to merge rules.
 
@@ -183,7 +188,7 @@ ConvertFrom-CIPolicy -XmlFilePath $BaseXml -BinaryFilePath $AuditBinary -ErrorAc
 
 Create the source/compiled directories before running the commands. Publish the binary to your approved deployment share. The example UNC path used here is `\\YourPolicyServer\WDAC$\PAW-Audit.p7b`; replace it with your actual share. Target computer accounts need read access at both share and NTFS levels; only authorized policy administrators should be able to replace the policy.
 
-Configure the pilot GPO:
+Configure the pilot GPO. On Windows 11 this built-in setting is the single-policy path Microsoft no longer prefers; it is used here only for one unsigned `SiPolicy.p7b`. See the [deployment note above](#choose-the-policy-management-model-first).
 
 ```text
 Computer Configuration\Administrative Templates\System\Device Guard
@@ -197,15 +202,17 @@ For this **single-policy GPO path**, the deployed endpoint file is `C:\Windows\S
 
 The screenshot shows the historical `SiPolicy.p7b` in the `CodeIntegrity` root. Leave pre-existing Microsoft platform policies such as `driversipolicy.p7b` and `VbsSiPolicy.p7b` alone.
 
-On the pilot PAW, apply GPO and inspect computer-scope results:
+On the pilot PAW, apply GPO from an **elevated** session and inspect computer-scope results. A non-admin `gpupdate /force` can skip computer policy and still exit `0`, so the exit-code check below is not an elevation check:
 ```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run gpupdate in an elevated session. A non-admin gpupdate can skip computer policy and still exit 0." }
 gpupdate /force
 if ($LASTEXITCODE -ne 0) { throw "gpupdate failed: $LASTEXITCODE" }
 gpresult /r /scope computer
 if ($LASTEXITCODE -ne 0) { throw "gpresult failed: $LASTEXITCODE" }
 ```
 
-**Restart the pilot for the initial built-in GPO deployment**, as documented by Microsoft, then verify the loaded policy in Step 4. A successful `gpupdate` means policy processing completed, not that the intended WDAC binary activated. Supported live updates may use CiTool/RefreshPolicy when applicable, but do not substitute those tools for activation evidence or an explicit reboot requirement. See [Microsoft's GPO deployment procedure](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy).
+**Restart the pilot for the initial built-in GPO deployment**, as documented by Microsoft, then verify the loaded policy in Step 4. A successful elevated `gpupdate` means policy processing completed, not that the intended WDAC binary activated. Supported live updates may use CiTool/RefreshPolicy when applicable, but do not substitute those tools for activation evidence or an explicit reboot requirement. See [Microsoft's GPO deployment procedure](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy).
 
 ---
 
@@ -406,9 +413,11 @@ Resolve competing GPO settings deliberately: multiple links do not turn the buil
 
 ![Group Policy Management — GPO_WDAC_Enforcement linked to Workstation OU](images/11_gpo_management.png)
 
-Apply and verify on the PAW:
+Apply and verify on the PAW from an **elevated** session. A non-admin `gpupdate /force` can skip computer policy and still exit `0`:
 
 ```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run gpupdate in an elevated session. A non-admin gpupdate can skip computer policy and still exit 0." }
 gpupdate /force
 if ($LASTEXITCODE -ne 0) { throw "gpupdate failed: $LASTEXITCODE" }
 gpresult /r /scope computer
@@ -449,9 +458,11 @@ In the connected/ISG or Managed Installer profiles, a nominally "unapproved" tes
 
 ## 4. ✅ STIG Compliance Verification
 
-With the enforce policy active, run the STIG check command:
+With the enforce policy active, run the STIG check from an **elevated** PowerShell session on the PAW. The published check requires Run as administrator; do not record a non-elevated result.
 
 ```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run the STIG check in an elevated PowerShell session (Run as administrator)." }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *codeintegrity*
 ```
 
@@ -484,8 +495,8 @@ With both values at `2`, the two numeric STIG checks are met on the tested PAW. 
 | Multiple-policy deployment | `C:\Windows\System32\CodeIntegrity\CiPolicies\Active\{PolicyID}.cip` |
 | Open CI event log | `C:\Windows\System32\mmc.exe eventvwr.msc /c:"Microsoft-Windows-CodeIntegrity/Operational"` |
 | GPO node | `Computer Configuration\Administrative Templates\System\Device Guard\Deploy App Control for Business` |
-| Force GPO refresh | `gpupdate /force` |
-| STIG check | `Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard \| FL *codeintegrity*` |
+| Force GPO refresh | Elevated `gpupdate /force`. A non-admin run can skip computer policy and still exit `0`. |
+| STIG check | Elevated `Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard \| FL *codeintegrity*` |
 
 For read-only source XML inspection and target PAW checks, see the [Diagnostics and Troubleshooting runbook](DIAGNOSTICS-README.md).
 
@@ -543,8 +554,8 @@ This section consolidates operational gotchas and Advanced Options panel setting
 ### Operational Gotchas
 
 - 🔀 **Merge order determines output identity:** Put the intended base first in the displayed table. Reversing inputs can produce the wrong identity/format; it is not inherently XML corruption or first-rule precedence.
-- 🖥️ **Windows 11 supports multiple policies:** Separate enforced bases generally intersect their allowlists; a base and its authorized supplementals expand that base's allowed set. Explicit denies still win. The built-in GPO deployment setting remains single-policy only.
-- 📡 **Offline versus connected profiles:** Disable ISG for the offline profile. The reviewed `10.0.5.9` variant enables it; test connectivity and authorization behavior separately rather than treating cloud reputation as an offline allowlist.
+- 🖥️ **Windows 11 supports multiple policies:** Separate enforced bases generally intersect their allowlists; a base and its authorized supplementals expand that base's allowed set. Explicit denies still win. The built-in GPO deployment setting remains single-policy only. Microsoft recommends script, ConfigMgr, or CSP deployment on Windows 11; this guide uses the GPO setting only for the unsigned single-policy walkthrough.
+- 📡 **No-Internet versus connected profiles:** "Offline" in this guide means no Internet and no ISG, not disconnected from the domain. Disable ISG for that profile. The reviewed `10.0.5.9` variant enables ISG; test connectivity and authorization behavior separately rather than treating cloud reputation as an allowlist when the PAW has no Internet.
 - 🥾 **Boot Audit on Failure is limited:** It can switch the policy to audit when a boot-critical driver is blocked. It does not recover every application failure or guarantee both STIG enforcement fields remain `2`.
 - 🔧 **Managed Installer requires configuration:** Verify the AppLocker managed-installer designation and file origin tags. Do not use an unspecified registry workaround as a substitute for the documented deployment process.
 
@@ -705,21 +716,28 @@ Computer Configuration → Administrative Templates → System → Device Guard
 | Setting | Recommended Value |
 |---|---|
 | Turn On Virtualization Based Security | **Enabled** |
-| Select Platform Security Level | Secure Boot and DMA Protection |
+| Select Platform Security Level | **Secure Boot** |
 | Virtualization Based Protection of Code Integrity | Enabled without UEFI lock |
 | Credential Guard Configuration | Enabled without UEFI lock |
+
+Do not select **Secure Boot and DMA Protection** for this lab. DMA protection is not required for V-243450 or V-243451, and Windows PAW STIG V3R3 has no DMA-protection finding. Those two checks are met when `CodeIntegrityPolicyEnforcementStatus` and `UsermodeCodeIntegrityPolicyEnforcementStatus` are `2`. The guest must actually be using Secure Boot for `RequiredSecurityProperties` to include `2`. That `2` is Secure Boot, not the STIG enforcement status.
 
 > [!IMPORTANT]
 > **Evaluate UEFI lock before production deployment.** Firmware-backed configuration resists ordinary remote/OS-level disabling, but the exact protection and removal procedure depend on the feature. Test the supported physical-presence/recovery process and retain BitLocker recovery material. Do not treat a lock as irreversible or proof that every privileged attack is prevented. Lab examples use no UEFI lock to preserve recoverability.
 
-**Step 3 — Apply and reboot:**
-```
+**Step 3 — Apply from an elevated session and reboot:**
+```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run gpupdate in an elevated session. A non-admin gpupdate can skip computer policy and still exit 0." }
 gpupdate /force
+if ($LASTEXITCODE -ne 0) { throw "gpupdate failed: $LASTEXITCODE" }
 ```
 Reboot the guest.
 
-**Step 4 — Verify the posture after reboot:**
+**Step 4 — Verify the posture after reboot from an elevated session:**
 ```powershell
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsAdmin) { throw "Run this check in an elevated PowerShell session (Run as administrator)." }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | FL *virtualization*, *security*
 ```
 
@@ -730,12 +748,12 @@ Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\D
 | Property | Before | After | Meaning |
 |---|---|---|---|
 | `VirtualizationBasedSecurityStatus` | `2` | `2` | ✅ VBS running at both stages |
-| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | Requires base virtualization support (1) + Secure Boot (2); does **not** establish DMA protection (3) |
+| `RequiredSecurityProperties` | `{0}` | `{1, 2}` | Expected for **Secure Boot**: base virtualization support (1) and Secure Boot (2). DMA protection (3) is not selected and is not required. |
 | `SecurityServicesConfigured` | `{0}` | `{1, 2}` | ✅ Credential Guard (1) + HVCI (2) configured |
 | `SecurityServicesRunning` | `{1}` | `{1, 2}` | ✅ Both Credential Guard (1) and HVCI (2) now running |
 | `SecurityFeaturesEnabled` | `{0}` | `{0}` | Do not infer a VBS/HVCI pass from this value alone; use the documented running/configured properties |
 
-These are historical observations, not guaranteed outputs for every VM. If the GPO requires DMA protection, confirm the supported platform and required/running posture; a `{1, 2}` result is not evidence of DMA protection.
+These are historical observations, not guaranteed outputs for every VM. `{1, 2}` is the expected `RequiredSecurityProperties` result for **Secure Boot**. It does not include DMA protection (`3`), and this lab does not require that value. V-243450 and V-243451 are satisfied by the Code Integrity and user-mode Code Integrity enforcement fields returning `2`, not by a DMA property.
 
 **Value decode for `SecurityServicesRunning` / `SecurityServicesConfigured`:**
 | Value | Service |
