@@ -12,7 +12,7 @@
 > **Historical POC XML:** [`poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml`](poc_policy/WIN11-WDAC-CIPolicy_v10.0.5.1.xml) — retained as the original enforce-mode example, not the latest policy<br>
 > **Later policy reviewed:** Version `10.0.5.9`, with ISG, UMCI, and supplemental support enabled; see the profile distinction below. Its binary and authoring XML are not included in this repository.
 
-**Start here:** [Choose merge or supplemental policies](#choose-the-policy-management-model-first) | [Walkthrough](#3--step-by-step-walkthrough) | [Diagnostics](#8-diagnostics-and-troubleshooting) | [Recovery and reset](#recovery-rollback-and-starting-over)
+**Start here:** [Choose merge or supplemental policies](#choose-the-policy-management-model-first) | [Walkthrough](#3--step-by-step-walkthrough) | [Diagnostics](#8-diagnostics-and-troubleshooting) | [Recovery and reset](#recovery-rollback-and-starting-over) | [Step-by-step policy reset](POLICY-RESET-README.md)
 
 ---
 
@@ -571,6 +571,8 @@ Replace the placeholder with the binary's verified policy GUID. New **signed bas
 See [Microsoft's multiple-policy guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/deploy-multiple-appcontrol-policies) and [script deployment guidance](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-with-script). Do not silently reset the identity or rename a `.p7b` to `.cip` and call that a migration.
 
 ### Recovery, Rollback, and Starting Over
+
+For the complete removal sequence, signed-base staging, and before/after cleared-state checks, use the [standalone policy reset runbook](POLICY-RESET-README.md). The summary below is not a replacement for its gates.
 
 **Prefer a forward corrective revision to deleting an active policy.** For example, copy known-good rules into a new revision with the **same identity** and a version higher than the deployed version. Going from `10.0.5.9` to `10.0.5.10` is normal; changing the friendly name or date is not versioning. Do not count on a lower-version binary replacing a newer policy.
 
