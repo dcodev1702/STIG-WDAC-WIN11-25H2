@@ -1,5 +1,5 @@
 # 1. Confirm the active multi-policy binary exists under CiPolicies\Active\{PolicyID}.cip (and no legacy SiPolicy.p7b exists)
-Get-ChildItem -LiteralPath "$env:SystemRoot\System32\CodeIntegrity\CiPolicies\Active" -Filter '*.cip' |
+Get-ChildItem -LiteralPath "$env:SystemRoot\System32\CodeIntegrity\CiPolicies\Active" -Filter '*.cip' -ErrorAction Stop |
     Select-Object Name, Length, LastWriteTime
 Test-Path "$env:SystemRoot\System32\CodeIntegrity\SiPolicy.p7b"   # Expect: False
 
@@ -13,4 +13,4 @@ Get-WinEvent -FilterHashtable @{
     LogName   = 'Microsoft-Windows-CodeIntegrity/Operational'
     Id        = 3099
     StartTime = (Get-Date).AddMinutes(-15)
-} -MaxEvents 5 | Select-Object TimeCreated, Id, Message | Format-List
+} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | Format-List

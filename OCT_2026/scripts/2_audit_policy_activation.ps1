@@ -1,4 +1,4 @@
-# 1. Stage 1 STIG Check — Expect BOTH values to now be 1 (Audit Mode)!
+# 1. Stage 1 STIG Check - Expect BOTH values to now be 1 (Audit Mode)!
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
     Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus
 
@@ -12,5 +12,5 @@ Get-WinEvent -FilterHashtable @{
     LogName   = 'Microsoft-Windows-CodeIntegrity/Operational'
     Id        = 3099
     StartTime = (Get-Date).AddMinutes(-10)
-} -MaxEvents 5 | Select-Object TimeCreated, Id, Message | Format-List
+} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | Format-List
 

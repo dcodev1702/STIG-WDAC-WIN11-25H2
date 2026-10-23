@@ -4,7 +4,8 @@ $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 )
 if (-not $IsAdmin) { throw 'Run the STIG check in an elevated PowerShell session (Run as administrator).' }
 
-$DG = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard
+$DG = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard -ErrorAction Stop
+if (-not $DG) { throw 'Win32_DeviceGuard returned no data on this system.' }
 $DG | Format-List *codeintegrity*
 
 Write-Host "V-243450 (CodeIntegrityPolicyEnforcementStatus)         : $($DG.CodeIntegrityPolicyEnforcementStatus) $(if ($DG.CodeIntegrityPolicyEnforcementStatus -eq 2) { '[PASS - NOT A FINDING]' } else { '[OPEN FINDING]' })" -ForegroundColor $(if ($DG.CodeIntegrityPolicyEnforcementStatus -eq 2) { 'Green' } else { 'Red' })
