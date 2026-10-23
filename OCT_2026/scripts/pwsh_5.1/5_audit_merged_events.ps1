@@ -26,6 +26,7 @@ $Remaining3076 | Select-Object TimeCreated, Message | Format-List
 # 3. Screening is clean (or the remaining events were reviewed with -AcceptRemaining): prepare Base-Enforce.xml for the Wizard (Step 6)
 if ($Remaining3076.Count -gt 0 -and -not $AcceptRemaining) {
     Write-Host "NOT ready to enforce: $($Remaining3076.Count) new 3076 event(s). If any are for an application you need, repeat Steps 4 and 5. If every one is for an application you intend to keep blocked, re-run this script with -AcceptRemaining." -ForegroundColor Yellow
+    Write-Host "Per-event detail (file, process, signer, hashes): .\Export-CIEventEvidence.ps1 -StartTime '$($ScreenStart.ToString('o'))'" -ForegroundColor Cyan
     return
 }
 

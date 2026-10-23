@@ -1,12 +1,14 @@
 #Requires -PSEdition Desktop
 # Windows PowerShell 5.1 edition - run in an elevated "Windows PowerShell" console or ISE (NOT pwsh 7).
+# Step 7: pre-deployment gate, stamp v3, compile, and apply the ENFORCED policy (Audit Mode is the only option turned off).
+param(
+    # Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (empty = skip the check)
+    [string]$ExcludedAppPattern = ''
+)
 
 Import-Module ConfigCI -WarningAction SilentlyContinue -ErrorAction Stop
 
 $PolicyGuid = (Get-Content -LiteralPath 'C:\WDAC\Source\PolicyGuid.txt' -Raw -ErrorAction Stop).Trim()
-
-# Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (leave empty to skip the check)
-$ExcludedAppPattern = ''
 
 # If the Wizard wrote a version-suffixed file (e.g., Base-Enforce_v*.xml), normalize it to Base-Enforce.xml
 $LatestEnforceXml = Get-ChildItem -Path 'C:\WDAC\Source' -Filter 'Base-Enforce*.xml' |
@@ -26,10 +28,10 @@ $AuditDoc.Load($AuditXml)
 $AuditOptions = @($AuditDoc.SiPolicy.Rules.Rule.Option)
 
 # 1. Guarantee Enforce Mode options (Audit Mode OFF, Boot Audit ON, Supplemental ON, UMCI ON, Script Enforcement Disabled)
-foreach ($OptOn in @(0, 2, 6, 9, 10, 11, 16, 17)) {
+foreach ($OptOn in @(0, 2, 6, 9, 10, 11, 13, 16, 17)) {
     Set-RuleOption -FilePath $EnforceXml -Option $OptOn -ErrorAction Stop
 }
-foreach ($OptOff in @(3, 13, 14, 15, 18, 19, 20)) {
+foreach ($OptOff in @(3, 14, 15, 18, 19, 20)) {
     # Option 3 = Enabled:Audit Mode -> Deleting Option 3 guarantees ENFORCE MODE!
     Set-RuleOption -FilePath $EnforceXml -Option $OptOff -Delete -ErrorAction Stop
 }
@@ -89,7 +91,7 @@ $Check | Format-List
 
 if (-not $Check.OnlyAuditModeTurnedOff) {
     Write-Host "Audit Mode must be the only option turned off, but these screened options are missing from Base-Enforce.xml: $($OtherOptionsTurnedOff -join ', ')" -ForegroundColor Red
-    Write-Host 'Switch them back ON in the Wizard. If they are options this guide requires OFF (Managed Installer, ISG, Invalidate EAs, Runtime FilePath Rule Protection, Dynamic Code Security, Revoked Expired As Unsigned), re-run script 4 to clean the audit policy and re-screen.' -ForegroundColor Red
+    Write-Host 'Switch them back ON in the Wizard. If they are options this guide requires OFF (ISG, Invalidate EAs, Runtime FilePath Rule Protection, Dynamic Code Security, Revoked Expired As Unsigned), re-run script 4 to clean the audit policy and re-screen.' -ForegroundColor Red
 }
 if (-not ($Check.SameGuidAsAudit -and $Check.MultiPolicyFormatValid -and $Check.AuditModeRemoved -and $Check.OnlyAuditModeTurnedOff -and $Check.UMCI_Enabled -and $Check.BootAuditEnabled -and $Check.AllowSupplemental -and -not $Check.ExcludedAppInPolicy)) {
     throw 'STOP: Pre-deployment verification failed! Review the False property above before applying.'
