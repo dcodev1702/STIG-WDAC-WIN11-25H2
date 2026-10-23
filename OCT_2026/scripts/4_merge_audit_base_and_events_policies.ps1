@@ -1,14 +1,20 @@
+# PowerShell 7 edition - run in an elevated "pwsh" window.
+# Step 5: merge Base-Audit.xml + Events-Allow.xml, keep Audit Mode, deploy, and start the screening window.
+param(
+    # Optional: admin-writable-only folders to allow with a FilePath rule, e.g. 'C:\Program Files\MyApp\*'.
+    # A folder that does not exist on this machine is skipped with a warning; a folder standard users can write to is
+    # skipped too (runtime FilePath rule protection would ignore the rule).
+    [string[]]$AdditionalFolderRules = @(),
+    # Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (empty = skip the check)
+    [string]$ExcludedAppPattern = ''
+)
+
 if (-not (Get-Module ConfigCI)) { Import-Module ConfigCI -UseWindowsPowerShell -WarningAction SilentlyContinue -ErrorAction Stop }
 
 $BaseXml        = 'C:\WDAC\Source\Base-Audit.xml'
 $EventsXml      = 'C:\WDAC\Source\Events-Allow.xml'
 $MergedXml      = 'C:\WDAC\Source\Base-Audit-Merged.xml'
 $PolicyGuidFile = 'C:\WDAC\Source\PolicyGuid.txt'
-
-# Optional: admin-writable-only folders to allow with a FilePath rule, e.g. 'C:\Program Files\MyApp\*' (leave empty if not needed)
-$AdditionalFolderRules = @()
-# Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (leave empty to skip the check)
-$ExcludedAppPattern = ''
 
 foreach ($RequiredFile in $BaseXml, $EventsXml, $PolicyGuidFile) {
     if (-not (Test-Path -LiteralPath $RequiredFile)) { throw "STOP: Required file not found: $RequiredFile" }
@@ -22,8 +28,17 @@ catch { throw "STOP: Merge-CIPolicy failed: $($_.Exception.Message) Run 3_1_vali
 # 2. Optional: add FilePath allow rules for the admin-protected folders listed in $AdditionalFolderRules
 #    (Runs New-CIPolicyRule in Windows PowerShell 5.1 so Rule objects serialize cleanly into Merge-CIPolicy)
 foreach ($Folder in $AdditionalFolderRules) {
-    if (-not (Test-Path -LiteralPath (Split-Path $Folder -Parent))) {
+    $FolderPath = Split-Path $Folder -Parent
+    if (-not (Test-Path -LiteralPath $FolderPath)) {
         Write-Warning "Skipping FilePath rule - folder not found: $Folder"
+        continue
+    }
+    $UserWrite = @((Get-Acl -LiteralPath $FolderPath).Access | Where-Object {
+        $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)" -match 'Write|Modify|FullControl|CreateFiles|AppendData|268435456|1073741824' -and
+        "$($_.IdentityReference)" -notmatch 'SYSTEM|Administrators|TrustedInstaller|CREATOR OWNER'
+    })
+    if ($UserWrite.Count -gt 0) {
+        Write-Warning "Skipping FilePath rule - $FolderPath is writable by $((@($UserWrite.IdentityReference) | Select-Object -Unique) -join ', '). Runtime FilePath rule protection would ignore it; allow that application with Publisher or Hash rules instead."
         continue
     }
     Write-Host "Adding admin-protected FilePath rule: $Folder" -ForegroundColor Cyan
@@ -46,19 +61,19 @@ foreach ($Folder in $AdditionalFolderRules) {
 #      9 = Enabled:Advanced Boot Options Menu
 #     10 = Enabled:Boot Audit On Failure
 #     11 = Disabled:Script Enforcement
+#     13 = Enabled:Managed Installer (MECM / Intune is the managed installer in this environment)
 #     16 = Enabled:Update Policy No Reboot
 #     17 = Enabled:Allow Supplemental Policies
-foreach ($OptOn in @(0, 2, 3, 6, 9, 10, 11, 16, 17)) {
+foreach ($OptOn in @(0, 2, 3, 6, 9, 10, 11, 13, 16, 17)) {
     Set-RuleOption -FilePath $MergedXml -Option $OptOn -ErrorAction Stop
 }
 #    Ensure UNWANTED options (often leaked by Wizard event policies) are OFF:
-#     13 = Enabled:Managed Installer
 #     14 = Enabled:Intelligent Security Graph Authorization
 #     15 = Enabled:Invalidate EAs on Reboot
 #     18 = Disabled:Runtime FilePath Rule Protection (deleting Option 18 keeps Runtime Protection ON!)
 #     19 = Enabled:Dynamic Code Security
 #     20 = Enabled:Revoked Expired As Unsigned
-foreach ($OptOff in @(13, 14, 15, 18, 19, 20)) {
+foreach ($OptOff in @(14, 15, 18, 19, 20)) {
     Set-RuleOption -FilePath $MergedXml -Option $OptOff -Delete -ErrorAction Stop
 }
 

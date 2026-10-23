@@ -27,3 +27,11 @@ $EvtxPath = 'C:\WDAC\Events\PAW-Audit-3076.evtx'
 & wevtutil.exe epl 'Microsoft-Windows-CodeIntegrity/Operational' $EvtxPath "/q:*[System[(EventID=3076 or EventID=3089) and TimeCreated[@SystemTime>='$StartUtc']]]" /ow:true
 if ($LASTEXITCODE -ne 0) { throw "STOP: wevtutil.exe failed to export events (exit code $LASTEXITCODE). Run this from an elevated session." }
 Get-Item -LiteralPath $EvtxPath -ErrorAction Stop | Select-Object FullName, Length, LastWriteTime
+
+# 3. Read the export back: it must hold the same 3076 count as the live log, and one or more 3089 per 3076
+#    (no 3089 for a 3076 means the Wizard can only offer a Hash rule for that file)
+$Exported = @(Get-WinEvent -Path $EvtxPath -ErrorAction SilentlyContinue)
+$Exported3076 = @($Exported | Where-Object Id -eq 3076).Count
+Write-Host "Exported: $Exported3076 x 3076, $(@($Exported | Where-Object Id -eq 3089).Count) x 3089 (live log: $($Events3076.Count) x 3076 since $($AuditRoundStart.ToString('o')))" -ForegroundColor Cyan
+if ($Exported3076 -ne $Events3076.Count) { Write-Warning 'The exported 3076 count differs from the live log. New events may have arrived during the export; re-run this script before Step 4.2.' }
+Write-Host "Evidence (every event, with hashes and signer): .\Export-CIEventEvidence.ps1 -EvtxPath '$EvtxPath'" -ForegroundColor Cyan
