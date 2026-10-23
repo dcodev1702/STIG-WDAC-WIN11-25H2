@@ -1,7 +1,9 @@
 # Step 1 - run on the fully configured WDAC REFERENCE device (elevated, Windows PowerShell 5.1 or PowerShell 7).
 # Builds the two GPO payloads from the reference device's ENFORCED policy XML (C:\WDAC\Source\Base-Enforce.xml):
-#   Audit\   = the same rules + Enabled:Audit Mode, version N
-#   Enforce\ = the same rules, Audit Mode OFF,       version N+1   (higher, so Audit -> Enforce replaces in place)
+#   Audit\   = the same rules + Enabled:Audit Mode, version YYYY.MM.DD.N
+#   Enforce\ = the same rules, Audit Mode OFF,       version YYYY.MM.DD.N+1   (higher, so Audit -> Enforce replaces in place)
+# Versions use today's (local) date with a daily counter, and are always above every version already known for the policy
+# (WDAC-Version.ps1), including the packages already published in both GPOs.
 # Each folder gets {PolicyGUID}.cip, manifest.json (GUID, version, SHA-256, mode) and Deploy-WDACPolicy.ps1.
 # Nothing is deployed and no GPO is touched.
 param(
@@ -23,20 +25,13 @@ try {
     foreach ($F in $EnforceXml, $GuidFile) { if (-not (Test-Path -LiteralPath $F)) { throw "STOP: $F not found. Finish C:\WDAC\config\README.md on this device first." } }
     $Guid = (Get-Content -LiteralPath $GuidFile -Raw).Trim()
 
-    # ---------------------------------------------------------------- versions: higher than anything seen so far for this GUID
-    if (-not $AuditVersion) {
-        $Seen = New-Object System.Collections.Generic.List[version]
-        $Src = New-Object System.Xml.XmlDocument; $Src.Load($EnforceXml); $Seen.Add([version]$Src.SiPolicy.VersionEx)
-        $Act = @((& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies) | Where-Object { $_.PolicyID -ieq $Guid.Trim('{}') }
-        foreach ($A in $Act) { $Seen.Add([version]$A.VersionString) }
-        foreach ($M in @(Get-ChildItem -Path $Cfg.PackageRoot -Filter 'manifest.json' -Recurse -File -ErrorAction SilentlyContinue)) {
-            foreach ($P in @((Get-Content -LiteralPath $M.FullName -Raw | ConvertFrom-Json).Policies | Where-Object { $_.PolicyGuid -ieq $Guid })) { $Seen.Add([version]$P.Version) }
-        }
-        $Max = ($Seen | Sort-Object | Select-Object -Last 1)
-        if ($Max.Revision + 2 -gt 65535) { throw "STOP: the revision of v$Max is too high to auto-increment; pass -AuditVersion and -EnforceVersion." }
-        $AuditVersion = "$($Max.Major).$($Max.Minor).$($Max.Build).$($Max.Revision + 1)"
-        Add-WdacResult $R 'OK' 'Version source' "highest version seen for $Guid (XML, active, earlier packages): v$Max"
-    }
+    # ---------------------------------------------------------------- versions: YYYY.MM.DD.N (today), above everything known for this GUID
+    #   known = source XML, this device's active policy, earlier packages AND what is already published in both GPOs (SYSVOL),
+    #   so any reference device picks a version the endpoints will accept
+    $Plan = Get-WdacPackageVersions $Cfg $Guid $EnforceXml
+    Add-WdacResult $R 'OK' 'Version plan' "next pair $($Plan.Versions -join ' / ') - $($Plan.Basis); highest known v$($Plan.Highest) ($($Plan.Sources))"
+    if (-not $AuditVersion) { $AuditVersion = $Plan.Versions[0] }
+    elseif ($Plan.Highest -ne '(none)' -and [version]$AuditVersion -le [version]$Plan.Highest) { throw "STOP: -AuditVersion $AuditVersion is not higher than v$($Plan.Highest), which is already known for $Guid - endpoints would ignore it. Use $($Plan.Versions[0]) or higher (or omit -AuditVersion)." }
     if (-not $EnforceVersion) { $V = [version]$AuditVersion; $EnforceVersion = "$($V.Major).$($V.Minor).$($V.Build).$($V.Revision + 1)" }
     if ([version]$EnforceVersion -le [version]$AuditVersion) { throw "STOP: EnforceVersion ($EnforceVersion) must be higher than AuditVersion ($AuditVersion)." }
 

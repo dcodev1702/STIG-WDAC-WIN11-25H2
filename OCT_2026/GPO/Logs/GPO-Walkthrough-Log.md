@@ -134,3 +134,22 @@
 - `C:\WDAC\config\` **not modified** by this effort (README SHA-256 prefix unchanged `D11AACAC41D1D54A`).
 
 *Log closed 2026-10-23 19:24:57 (+02:00).*
+
+### Correction — Enforce → Audit order — 2026-10-23 23:20
+- Found while answering *"how do I go from Enforcing to Audit via GPO?"*: GPO-README §10.2 and the warning text in `3_GPO_set_mode.ps1` said *build + publish a new pair, then switch to Audit*. That leaves a race: `2_GPO_create_gpos.ps1` updates **both** GPOs, so with the Enforce link still enabled a device refreshing in between takes the new, higher **Enforce** version and then ignores the new Audit one.
+- **Fixed order (README §10.2 + script 3 warning):** `3_GPO_set_mode.ps1 -Mode Audit` **first**, then `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` → `4_GPO_validate_gpos.ps1` → endpoint refresh → `5_GPO_validate_endpoint.ps1`. README also notes passing `-AuditVersion` explicitly when building on a different reference device. Script 3 re-checked: 0 parse errors (PS7 + 5.1), ASCII-only. Not executed (the OU stays in Enforce).
+
+### Change — Date-based policy versions `YYYY.MM.DD.N` (D15 / G10) — ✅ 2026-10-23 23:50
+- **User decision:** adopt `YYYY.MM.DD.N` (local date; counter N restarts at 1 each day) in the GPO **and** config scripts, so administrators can read the build date from the version. Lifts the earlier "don't touch config README" for this one cross-cutting change.
+- **Safety rule:** a new version is never lower than the highest version already known for the policy. Windows compares the four parts in order (date outranks counter), and CiTool/the GPO endpoint script only move forward. Clock skew or a later-dated version → continue after it.
+- **Shared helper `WDAC-Version.ps1`**, identical (hash-verified) in `C:\WDAC\config\scripts`, `…\pwsh_5.1`, `C:\WDAC\GPO\scripts` (and the `C:\WDAC-Scripts` working copies): `Get-WdacNextVersion`, `Get-WdacActivePolicyVersion`, `Get-WdacVersionsFromXml`, `Get-WdacVersionsFromArchive -Name` (only the base policy's own archives; a local supplemental's archive was being counted before the filter was added), `Get-WdacVersionsFromManifests`.
+- **Config scripts 1 / 4 / 6 (both editions):** hard-coded `2026.10.21.1/.2/.3` replaced by the helper (known = active policy + previous stage's XML + base-policy archives); archive names use the computed version; each script prints *"Policy version … (basis; highest known …)"*. Script 8 comment updated.
+- **GPO:** `1_GPO_build_packages.ps1` picks today's pair above every known version, **including the packages already published in both GPOs (SYSVOL)**; an explicit `-AuditVersion` that isn't higher is refused. `0_GPO_pre-flight.ps1` shows the pair the next build would use and recognizes a GPO-deployed active policy (*"deployed by the Enforce GPO package"*).
+- **READMEs:** config README §1.5 (scheme + IMPORTANT callout), Step 2/5/6/7/8.2 wording, §11 Option A snippet, Appendix B; GPO-README §1.2 note, §5 row, §6 versions + proven output, §10.2, Appendix A. Links: config 15/15, GPO 16/16 resolve; no Claude mentions.
+- **Tests:**
+  - Helper unit tests identical in PS7 and 5.1: no history → `2026.10.23.1`; after `.21.5` → `.23.1/.2`; same day after `.23.3` → `.4/.5`; future `.25.2` → `.25.3`; next day → `.24.1`; 9 Oct → `2026.10.9.1`; overflow guard.
+  - GPO pre-flight PASSED (PS7 + 5.1) → next pair `2026.10.23.1 / .2` (2 published payloads read).
+  - 5.1 `1_GPO_build_packages.ps1 -AuditVersion 2026.10.21.5` → refused (STOP, nothing built); 5.1 automatic build → `PAW-WDAC-GPO-Audit v2026.10.23.1` / `-Enforce v2026.10.23.2`, gate PASSED. The **test package was deleted** and `latest.txt` restored to `Packages\20261023-185944`. **Nothing was published**: the OU stays in Enforce at `2026.10.21.5`.
+  - Config selection lines with real data → `2026.10.23.1`; a same-day chain gives `.1 → .2 → .3`. (Config scripts 1/4/6 themselves were not run, because they deploy.)
+  - 40 script files: 0 parse errors (PS7 + 5.1), ASCII-only.
+- `C:\WDAC\results\config-upload-manifest-SHA256.csv` regenerated (31 files) because config changed.

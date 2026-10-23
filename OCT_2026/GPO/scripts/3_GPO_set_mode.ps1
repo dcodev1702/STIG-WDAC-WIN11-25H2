@@ -36,7 +36,7 @@ try {
     $VA = [version]($Man.Audit.Policies | Where-Object { $_.Type -eq 'Base' } | Select-Object -First 1).Version
     $VE = [version]($Man.Enforce.Policies | Where-Object { $_.Type -eq 'Base' } | Select-Object -First 1).Version
     if ($Mode -eq 'Audit' -and $Before.Enforce) {
-        Add-WdacResult $R 'WARN' 'Enforce -> Audit' "Devices that already run Enforce v$VE will NOT go back to Audit v$VA (the endpoint script never downgrades). To demote them, build a new pair (1_GPO_build_packages.ps1) and publish it (2_GPO_create_gpos.ps1); its Audit version will be higher than v$VE."
+        Add-WdacResult $R 'WARN' 'Enforce -> Audit' "Devices that already run Enforce v$VE will NOT go back to Audit v$VA (the endpoint script never downgrades). NEXT, with the Audit link now enabled: build a new pair (1_GPO_build_packages.ps1) and publish it (2_GPO_create_gpos.ps1) - devices then move to the new Audit version, which is higher than v$VE."
     }
     $Want = @{ Audit = ($Mode -eq 'Audit'); Enforce = ($Mode -eq 'Enforce') }
     # Disable first, then enable, so both links are never enabled at the same time

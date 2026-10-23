@@ -1,0 +1,29 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261023234750
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\1_GPO_build_packages.ps1 -AuditVersion 2026.10.21.5
+Process ID: 5704
+PSVersion: 5.1.28000.3231
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.28000.3231
+BuildVersion: 10.0.28000.3231
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+Status Check        Detail                                                                                                                                                                                                            
+------ -----        ------                                                                                                                                                                                                            
+OK     Version plan next pair 2026.10.23.1 / 2026.10.23.2 - today 2026-10-23, counter 1; highest known v2026.10.21.5 (source XML, this device's active policy, earlier packages, 2 published GPO payload(s))                          
+FAIL   Build        STOP: -AuditVersion 2026.10.21.5 is not higher than v2026.10.21.5, which is already known for {75AFC1CF-5372-491A-80CA-7BBB694F0A00} - endpoints would ignore it. Use 2026.10.23.1 or higher (or omit             
+                    -AuditVersion).
+Package build: FAILED - 1 fail, 0 warning(s). Results: C:\WDAC\GPO\Logs\1_GPO_build_packages-20261023-234750.csv
+**********************
+Windows PowerShell transcript end
+End time: 20261023234753
+**********************

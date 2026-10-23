@@ -1,0 +1,49 @@
+**********************
+PowerShell transcript start
+Start time: 20261023234716
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $__claudeCodeScript = $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT; $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT = $null; Invoke-Expression -Command $__claudeCodeScript
+Process ID: 5896
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+Status Check                                       Detail
+------ -----                                       ------
+OK     Session                                     Elevated as SKYNET\Lorenzo on WIN11-PAW-WDAC (PowerShell 7.6.8 Core)
+OK     Domain membership                           skynet-home.local
+OK     Module GroupPolicy                          loaded
+OK     Module ActiveDirectory                      loaded
+OK     Module ConfigCI                             loaded
+OK     GPO rights                                  SKYNET\Domain Admins
+OK     Domain                                      skynet-home.local (SKYNET) - PDC emulator DC25-1.skynet-home.local
+OK     SYSVOL on DC25-1.skynet-home.local          \\DC25-1.skynet-home.local\SYSVOL\skynet-home.local\Policies reachable (Windows Server 2025 Datacenter)
+OK     Target OU                                   JMSC-WDAC-WRKSTNS - OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local (auto-detected from this computer)
+OK     OU member WIN11-PAW-WDAC                    Windows 11 Enterprise 10.0 (28000)
+OK     GPOs linked to OU                           JMSC-WDAC-PAWS - AppControl Audit (enabled=False); JMSC-WDAC-PAWS - AppControl Enforce (enabled=True)
+OK     GPO 'JMSC-WDAC-PAWS - AppControl Audit'     exists ({85b428c6-dd0f-4a6a-b672-ac7f70716a6c}) - 2_GPO_create_gpos.ps1 will UPDATE it
+OK     GPO 'JMSC-WDAC-PAWS - AppControl Enforce'   exists ({432b37d5-1a72-4372-b157-5cbad32eb908}) - 2_GPO_create_gpos.ps1 will UPDATE it
+OK     Base-Enforce.xml                            Base policy {75AFC1CF-5372-491A-80CA-7BBB694F0A00} v2026.10.21.3, Multiple Policy Format
+OK     Base-Enforce.xml mode                       Audit Mode OFF (enforced policy)
+OK     Option 13 Managed Installer                 ON (MECM / Intune)
+OK     Next package versions                       Audit 2026.10.23.1 / Enforce 2026.10.23.2 - today 2026-10-23, counter 1; highest known v2026.10.21.5 (source XML, this device's active policy, earlier packages, 2 published GPO
+                                                   payload(s))
+OK     Reference device active policy              PAW-WDAC-GPO-Enforce v2026.10.21.5, IsAuthorized True - deployed by the Enforce GPO package (built from Base-Enforce.xml)
+OK     Reference device STIG (KMCI / UMCI)         2 / 2
+OK     Local supplemental PAW-WDAC-Supp-ClaudeCode {0585a4c6-99ae-42cb-91e9-c34ad7afb041} v2026.10.23.1 - NOT packaged unless passed to 1_GPO_build_packages.ps1 -SupplementalXml
+OK     CiTool.exe / build                          build 28000
+GPO pre-flight: PASSED. Results: C:\WDAC\GPO\Logs\0_GPO_pre-flight-20261023-234716.csv
+**********************
+PowerShell transcript end
+End time: 20261023234722
+**********************

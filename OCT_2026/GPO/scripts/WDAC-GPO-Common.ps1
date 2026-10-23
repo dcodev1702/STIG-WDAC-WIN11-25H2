@@ -1,5 +1,8 @@
 # Shared helpers for the WDAC GPO scripts (dot-sourced by 0_ to 6_). Works in Windows PowerShell 5.1 and PowerShell 7.
 
+# Date-based policy versions (YYYY.MM.DD.N, never lower than any known version) - same file as in C:\WDAC\config\scripts
+. "$PSScriptRoot\WDAC-Version.ps1"
+
 # Loads a Windows module in either edition (ConfigCI goes through the compatibility session in PowerShell 7)
 function Import-WdacModule([string]$Name) {
     if (Get-Module -Name $Name) { return }
@@ -85,6 +88,29 @@ function Step-WdacGpoVersion($Paths, $Domain) {
     if ($Lines -match '^Version=') { $Lines = @($Lines | ForEach-Object { if ($_ -match '^Version=') { "Version=$New" } else { $_ } }) } else { $Lines += "Version=$New" }
     Set-Content -LiteralPath $Ini -Value $Lines -Encoding Ascii
     return $New
+}
+
+# SYSVOL payload folders of both WDAC GPOs (what endpoints can already see); nothing when the GPOs do not exist yet
+function Get-WdacPublishedPayloads($Cfg) {
+    try {
+        Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
+        $Domain = Get-WdacDomainInfo
+        foreach ($Name in $Cfg.AuditGpoName, $Cfg.EnforceGpoName) {
+            $G = Get-GPO -Name $Name -Server $Domain.PDC -ErrorAction SilentlyContinue
+            if ($G) { $P = Get-WdacGpoPaths $G.Id $Domain; Join-Path $P.SysvolPdc $P.PayloadRel }
+        }
+    }
+    catch { }
+}
+
+# Next Audit/Enforce version pair for a policy GUID: today's date + counter, above every version known from the source XML,
+# this device's active policy, earlier packages in Packages\ and the packages already PUBLISHED in both GPOs
+function Get-WdacPackageVersions($Cfg, [string]$Guid, [string]$EnforceXml) {
+    $Published = @(Get-WdacPublishedPayloads $Cfg)
+    $Known = @(Get-WdacVersionsFromXml $EnforceXml) + @(Get-WdacActivePolicyVersion $Guid) + @(Get-WdacVersionsFromManifests (@($Cfg.PackageRoot) + $Published) $Guid)
+    $Plan = Get-WdacNextVersion -Known $Known -Count 2
+    $Plan | Add-Member -NotePropertyName Sources -NotePropertyValue "source XML, this device's active policy, earlier packages, $($Published.Count) published GPO payload(s)"
+    return $Plan
 }
 
 # Reads manifest.json from a package folder or a GPO payload folder

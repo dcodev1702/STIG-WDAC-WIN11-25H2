@@ -57,8 +57,13 @@ try {
         if ($S.PolicyID -ieq $Guid -and $S.BasePolicyID -ieq $Guid -and $S.PolicyType -eq 'Base Policy') { Add-WdacResult $R 'OK' 'Base-Enforce.xml' "Base policy $Guid v$($S.VersionEx), Multiple Policy Format" } else { Add-WdacResult $R 'FAIL' 'Base-Enforce.xml' "PolicyID/BasePolicyID/type do not match PolicyGuid.txt ($Guid)" }
         if ($Opts -contains 'Enabled:Audit Mode') { Add-WdacResult $R 'FAIL' 'Base-Enforce.xml mode' 'Audit Mode is ON - the reference policy must be the enforced one' } else { Add-WdacResult $R 'OK' 'Base-Enforce.xml mode' 'Audit Mode OFF (enforced policy)' }
         Add-WdacResult $R $(if ($Opts -contains 'Enabled:Managed Installer') { 'OK' } else { 'WARN' }) 'Option 13 Managed Installer' $(if ($Opts -contains 'Enabled:Managed Installer') { 'ON (MECM / Intune)' } else { 'OFF' })
+        $Plan = Get-WdacPackageVersions $Cfg $Guid $EnforceXml
+        Add-WdacResult $R 'OK' 'Next package versions' "Audit $($Plan.Versions[0]) / Enforce $($Plan.Versions[1]) - $($Plan.Basis); highest known v$($Plan.Highest) ($($Plan.Sources))"
         $Active = @((& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies) | Where-Object { $_.PolicyID -ieq $Guid.Trim('{}') } | Select-Object -First 1
+        # The reference device may itself be in the target OU and run a version published by one of the WDAC GPOs
+        $FromGpo = @(Get-WdacPublishedPayloads $Cfg | ForEach-Object { $M = Read-WdacManifest $_; if ($M -and $Active) { @($M.Policies | Where-Object { $_.Type -eq 'Base' -and $_.PolicyGuid -ieq $Guid -and $_.Version -eq $Active.VersionString }) | ForEach-Object { "$($M.Mode) GPO package" } } })
         if ($Active -and $Active.VersionString -eq $S.VersionEx) { Add-WdacResult $R 'OK' 'Reference device active policy' "$($Active.FriendlyName) v$($Active.VersionString), IsAuthorized $($Active.IsAuthorized) - matches Base-Enforce.xml" }
+        elseif ($Active -and $FromGpo) { Add-WdacResult $R 'OK' 'Reference device active policy' "$($Active.FriendlyName) v$($Active.VersionString), IsAuthorized $($Active.IsAuthorized) - deployed by the $($FromGpo -join ', ') (built from Base-Enforce.xml)" }
         elseif ($Active) { Add-WdacResult $R 'WARN' 'Reference device active policy' "Active v$($Active.VersionString) differs from Base-Enforce.xml v$($S.VersionEx)" }
         else { Add-WdacResult $R 'WARN' 'Reference device active policy' 'The reference policy is not active on this device' }
         $DG = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard
