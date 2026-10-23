@@ -77,9 +77,15 @@ foreach ($OptOff in @(14, 15, 18, 19, 20)) {
     Set-RuleOption -FilePath $MergedXml -Option $OptOff -Delete -ErrorAction Stop
 }
 
-# 4. Stamp helpful PolicyName, PolicyId, and bumped VersionEx (2026.10.21.2) - DO NOT use -ResetPolicyID!
+# 4. Stamp helpful PolicyName, PolicyId, and the next version - YYYY.MM.DD.N, higher than the baseline and anything active
+#    (WDAC-Version.ps1) - DO NOT use -ResetPolicyID!
+. "$PSScriptRoot\WDAC-Version.ps1"
+$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $BaseXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Next = Get-WdacNextVersion -Known $Known
+$Version = $Next.Versions[0]
+Write-Host "Policy version $Version ($($Next.Basis); highest known: $($Next.Highest))" -ForegroundColor Cyan
 Set-CIPolicyIdInfo -FilePath $MergedXml -PolicyName 'PAW-WDAC-Audit-Merged' -PolicyId 'PAW-AUDIT-MERGED-v2' -ErrorAction Stop
-Set-CIPolicyVersion -FilePath $MergedXml -Version '2026.10.21.2' -ErrorAction Stop
+Set-CIPolicyVersion -FilePath $MergedXml -Version $Version -ErrorAction Stop
 
 # 5. Verify the merged policy BEFORE compiling
 [xml]$MergedDoc = Get-Content -LiteralPath $MergedXml
@@ -127,7 +133,7 @@ $CipFile = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
 try { ConvertFrom-CIPolicy -XmlFilePath $MergedXml -BinaryFilePath $CipFile -ErrorAction Stop }
 catch { throw "STOP: Compiling $MergedXml failed: $($_.Exception.Message) Run 3_1_validate_winevent_rules.ps1 on Events-Allow.xml (Step 4.3), then re-run this script. Nothing was deployed." }
 if (-not (Test-Path -LiteralPath $CipFile)) { throw "STOP: Compile did not produce $CipFile." }
-Copy-Item -LiteralPath $CipFile -Destination 'C:\WDAC\Compiled\PAW-WDAC-Audit-Merged_v2026.10.21.2.cip' -Force -ErrorAction Stop
+Copy-Item -LiteralPath $CipFile -Destination "C:\WDAC\Compiled\PAW-WDAC-Audit-Merged_v$Version.cip" -Force -ErrorAction Stop
 
 # 7. Apply the updated Merged Audit Policy live with CiTool.exe
 $CiOut = & "$env:SystemRoot\System32\CiTool.exe" --update-policy $CipFile -json

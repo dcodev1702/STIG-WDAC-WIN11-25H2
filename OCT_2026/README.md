@@ -86,15 +86,18 @@ Each audit stage repeats Steps 4 – 5 until the screening is clean. Every scrip
 
 ### 1.5 Version and ID Progression
 
-| Stage | XML file | Friendly name | Policy ID label | `VersionEx` | Mode | Expected STIG (KMCI / UMCI) |
+| Stage | XML file | Friendly name | Policy ID label | `VersionEx` (example: all stages on 2026-10-23) | Mode | Expected STIG (KMCI / UMCI) |
 |---|---|---|---|---|---|:---:|
 | Pre-flight | — | *(Microsoft platform policies only)* | — | — | — | `0 / 0` *or* `2 / 1` |
-| Baseline audit | `Base-Audit.xml` | `PAW-WDAC-Audit-Baseline` | `PAW-AUDIT-BASE-v1` | `2026.10.21.1` | Audit | `1 / 1` *or* `2 / 1` |
-| Merged audit | `Base-Audit-Merged.xml` | `PAW-WDAC-Audit-Merged` | `PAW-AUDIT-MERGED-v2` | `2026.10.21.2` | Audit | `1 / 1` *or* `2 / 1` |
-| **Enforced** | `Base-Enforce.xml` | `PAW-WDAC-Enforced` | `PAW-ENFORCED-v3` | `2026.10.21.3` | **Enforce** | **`2 / 2`** |
-| *Fix-forward (optional)* | `Base-Audit-Merged.xml` | `PAW-WDAC-Audit-Merged` | `PAW-AUDIT-MERGED-v2` | `2026.10.21.4` | Audit | `1 / 1` *or* `2 / 1` |
+| Baseline audit | `Base-Audit.xml` | `PAW-WDAC-Audit-Baseline` | `PAW-AUDIT-BASE-v1` | `2026.10.23.1` | Audit | `1 / 1` *or* `2 / 1` |
+| Merged audit | `Base-Audit-Merged.xml` | `PAW-WDAC-Audit-Merged` | `PAW-AUDIT-MERGED-v2` | `2026.10.23.2` | Audit | `1 / 1` *or* `2 / 1` |
+| **Enforced** | `Base-Enforce.xml` | `PAW-WDAC-Enforced` | `PAW-ENFORCED-v3` | `2026.10.23.3` | **Enforce** | **`2 / 2`** |
+| *Fix-forward (optional)* | `Base-Audit-Merged.xml` | `PAW-WDAC-Audit-Merged` | `PAW-AUDIT-MERGED-v2` | next version (§11 Option A) | Audit | `1 / 1` *or* `2 / 1` |
 
-Windows replaces the active policy only when the new `VersionEx` is **higher** than the one loaded.
+**Versions are date-based: `YYYY.MM.DD.N`.** The date is the local date the script runs, and the counter **N** restarts at **1** each day. Administrators can read from the version when a policy was built. Scripts 1, 4 and 6 choose the version with `scripts\WDAC-Version.ps1`. A stage run on a later day gets that day's date: a baseline on 10-23 and an enforce on 10-24 give `2026.10.23.1` → `2026.10.24.1`.
+
+> [!IMPORTANT]
+> Windows replaces the active policy only when the new `VersionEx` is **higher** than the one loaded. It compares the four parts in order, so the date outranks the counter. A new version is **never lower than the highest version already known** for the policy: the active one in CiTool, the previous stage's XML, and the archived `PAW-WDAC-*_v<version>.cip` files. If a clock is wrong or a later-dated version already exists, the scripts continue after that version instead of going backwards. Each part is a number, so 9 October shows as `2026.10.9.1` (no leading zeros).
 
 ### 1.6 Policy Rule Options — What Changes Between Audit and Enforce
 
@@ -251,6 +254,7 @@ Run in this order from `C:\WDAC-Scripts\` (PS7) or `C:\WDAC-Scripts\pwsh_5.1\` (
 | 15 | 8.1 | `7_DISA_STIG_CHECK.ps1` | V-243450 / V-243451 | **`2 / 2` PASS** |
 | 16 | 8.2 | `8_validate_multipolicy_layout.ps1` | `.cip` layout, CiTool, Event `3099` | `IsEnforced` / `IsAuthorized` `True` |
 | 17 | 8.3 – 8.4 | 🔄 **Reboot**; `Get-Blocked_CI_Events.ps1` / `Export-CIEventEvidence.ps1 -EventId 3077` | Positive test + block test | Approved apps work; block-test app logged as `3077` |
+| 18 | 8.5 *(optional)* | `New-WDACRunReport.ps1` | One self-contained HTML report of the whole run (STIG history, policies, FilePath verdicts, managed installer, every 3076/3077) | Report written to `C:\WDAC\Logs\` |
 
 **Quick start (copy, set `$Block`, and run line by line):**
 
@@ -277,6 +281,7 @@ $Block = ''                                  # regex for your block-test app, e.
 .\8_validate_multipolicy_layout.ps1
 #   >>> Step 8.3 / 8.4: reboot, test approved apps, launch the block-test app
 .\Export-CIEventEvidence.ps1 -EventId 3077 -StartTime (Get-Date).AddMinutes(-30)
+.\New-WDACRunReport.ps1 -BlockTestPattern $Block              # optional: -NotesMarkdown 'C:\WDAC\Logs\My-Run-Notes.md'
 ```
 
 > [!TIP]
@@ -395,7 +400,7 @@ Before changing anything it saves `Base-Audit.wizard-original-<timestamp>.xml`, 
 ```
 
 **Script 1:**
-1. Stamps `PAW-WDAC-Audit-Baseline` / `PAW-AUDIT-BASE-v1` / `2026.10.21.1`, with no `-ResetPolicyID`.
+1. Stamps `PAW-WDAC-Audit-Baseline` / `PAW-AUDIT-BASE-v1` / the next date-based version (e.g. `2026.10.23.1`, printed as *"Policy version …"*), with no `-ResetPolicyID`.
 2. Saves the GUID to `C:\WDAC\Source\PolicyGuid.txt`.
 3. Compiles `C:\WDAC\Compiled\{PolicyID}.cip` and keeps an archive copy.
 4. Deploys with `CiTool.exe --update-policy`.
@@ -403,7 +408,7 @@ Before changing anything it saves `Base-Audit.wizard-original-<timestamp>.xml`, 
 
 **Verify the script 1 output:** `PolicyType` = `Base Policy`, `PolicyID` = `BasePolicyID`, and `RuleOptions` includes `Enabled:Audit Mode`, `Enabled:UMCI`, `Enabled:Managed Installer`, `Enabled:Allow Supplemental Policies`, `Enabled:Boot Audit On Failure`, `Disabled:Script Enforcement`, `Enabled:Update Policy No Reboot`, and `Enabled:Unsigned System Integrity Policy`.
 
-**Script 2:** UMCI = `1` (KMCI `1`, or still `2` if platform policies enforced it already); CiTool shows `PAW-WDAC-Audit-Baseline` `2026.10.21.1` with `IsAuthorized True`; Event **3099** *"Refreshed and activated Code Integrity policy … PAW-WDAC-Audit-Baseline"*. The 3099 query retries for ~10 s, because the event can land a moment after script 1 finishes.
+**Script 2:** UMCI = `1` (KMCI `1`, or still `2` if platform policies enforced it already); CiTool shows `PAW-WDAC-Audit-Baseline` at the version script 1 printed, with `IsAuthorized True`; Event **3099** *"Refreshed and activated Code Integrity policy … PAW-WDAC-Audit-Baseline"*. The 3099 query retries for ~10 s, because the event can land a moment after script 1 finishes.
 
 > [!NOTE]
 > In CiTool output, `IsEnforced = True` means *the policy is active*, not that it is in enforce mode. The mode is what `Win32_DeviceGuard` reports.
@@ -511,7 +516,7 @@ Findings are tagged `FIXED` / `REMOVED` / `WARN` and saved to `C:\WDAC\Logs\Even
 1. Merges `Base-Audit.xml` (**first**) + `Events-Allow.xml` (**second**) → `Base-Audit-Merged.xml`.
 2. Adds FilePath rules for `-AdditionalFolderRules`, skipping, with a warning, any folder that doesn't exist or that standard users can write to.
 3. Re-asserts the ON options (0, 2, 3, 6, 9, 10, 11, **13**, 16, 17) and strips the OFF options (14, 15, 18, 19, 20).
-4. Stamps `PAW-WDAC-Audit-Merged` / `PAW-AUDIT-MERGED-v2` / `2026.10.21.2`.
+4. Stamps `PAW-WDAC-Audit-Merged` / `PAW-AUDIT-MERGED-v2` / the next date-based version, higher than the baseline (e.g. `2026.10.23.2`).
 5. **Gate:** no uncompilable `FileAttrib`, same GUID, Audit Mode / Supplemental / Boot Audit ON, block-test app absent.
 6. Compiles, deploys, writes `C:\WDAC\Events\ScreenStart.txt`, and shows the STIG values and CiTool inventory.
 
@@ -539,7 +544,7 @@ If a different `Base-Enforce.xml` already exists, script 5 **never overwrites it
 ### Step 6 — App Control Policy Wizard: Switch Audit → Enforce
 
 1. Wizard → **Policy Editor** → **Edit Policy XML File** → `C:\WDAC\Source\Base-Enforce.xml` (or the newest `Base-Enforce_<timestamp>.xml` script 5 named) → **Next**.
-   - **Policy Name / Policy ID:** leave them unchanged. They are only friendly labels. Script 6 stamps `PAW-WDAC-Enforced` / `PAW-ENFORCED-v3` / `2026.10.21.3`, and the `PolicyID` GUID, which must stay the same, isn't editable on this screen.
+   - **Policy Name / Policy ID:** leave them unchanged. They are only friendly labels. Script 6 stamps `PAW-WDAC-Enforced` / `PAW-ENFORCED-v3` / the next date-based version, and the `PolicyID` GUID, which must stay the same, isn't editable on this screen.
    - **New Save Location:** leave it blank. The Wizard then saves next to the original in `C:\WDAC\Source\`, often as `Base-Enforce_v10.0.0.0.xml`, and may already raise `VersionEx`. Both are fine.
 2. On **Policy Rules** (**+ Advanced Options**):
    - ❌ **Audit Mode → OFF**: the **only** toggle you change.
@@ -557,7 +562,7 @@ If a different `Base-Enforce.xml` already exists, script 5 **never overwrites it
 
 1. Uses the newest `Base-Enforce*.xml` and compares it with the **screened** `Base-Audit-Merged.xml`.
 2. Ensures options 0, 2, 6, 9, 10, 11, **13**, 16, 17 are ON and 3, 14, 15, 18, 19, 20 are OFF.
-3. Stamps `PAW-WDAC-Enforced` / `PAW-ENFORCED-v3` / `2026.10.21.3`.
+3. Stamps `PAW-WDAC-Enforced` / `PAW-ENFORCED-v3` / the next date-based version, higher than the screened audit policy (e.g. `2026.10.23.3`).
 4. **Gate:** no bad `FileAttrib`; same GUID; `PolicyID = BasePolicyID`; **Audit Mode is the only option turned off**; UMCI, Boot Audit, and Supplemental ON; block-test app absent.
 5. Compiles, records the `.cip` SHA-256, and deploys live.
 
@@ -597,7 +602,7 @@ V-243451 (UsermodeCodeIntegrityPolicyEnforcementStatus) : 2 [PASS - NOT A FINDIN
 
 ### 8.2 — Multi-Policy Layout, CiTool Inventory, Event 3099 (`8_validate_multipolicy_layout.ps1`)
 
-Expect `{PolicyID}.cip` in `CiPolicies\Active\`, `SiPolicy.p7b` = `False`, and CiTool `PAW-WDAC-Enforced` `2026.10.21.3` with `IsEnforced` / `IsAuthorized` `True`. Event 3099 should show the activation.
+Expect `{PolicyID}.cip` in `CiPolicies\Active\`, `SiPolicy.p7b` = `False`, and CiTool `PAW-WDAC-Enforced` at the version script 6 printed, with `IsEnforced` / `IsAuthorized` `True`. Event 3099 should show the activation.
 
 ### 8.3 — 🔄 Positive Test: Everything You Need Still Works
 
@@ -618,8 +623,26 @@ Launch the block-test app (double-click it, or `& 'C:\Path\To\App.exe'`). Expect
 - PowerShell: *"An Application Control policy has blocked this file."*
 - Event **3077**: `.\Get-Blocked_CI_Events.ps1`, or the evidence command above for a CSV with hashes and signer.
 
+### 8.5 — Run Report *(optional)* (`New-WDACRunReport.ps1`)
+
+```powershell
+.\New-WDACRunReport.ps1 -BlockTestPattern $Block      # add -NotesMarkdown <file> to append your own run notes
+```
+
+The report is **one self-contained HTML file**: inline CSS, no scripts, no external resources, light/dark aware and printable. It's written to `C:\WDAC\Logs\WDAC-Run-Report-<timestamp>.html`, and collects:
+
+| Section | Content |
+|---|---|
+| STIG values | Current `Win32_DeviceGuard`, plus every reading found in the `C:\WDAC\Logs` transcripts (the stage-by-stage progression) |
+| Policies | Active custom policies (CiTool); each XML stage (Audit Mode, Managed Installer, counts, options, SHA-256); every compiled `.cip` |
+| FilePath rules | Every FilePath rule, with whether Windows will **honor** it: admin-only ✅, user-writable ❌, or runtime check disabled in that policy ⚠️ |
+| Managed installer | MECM client, Intune IME, AppLocker `ManagedInstaller` collection, AppIDSvc, AppLockerFltr |
+| Script findings | Latest `0_1_validate_base_policy` and `3_1_validate_winevent_rules` CSVs |
+| Events | Every audit `3076` (from the exported `.evtx`), screening `3076`, and enforced `3077`. Rows matching `-BlockTestPattern` are marked *expected*; everything else is flagged for review. |
+| Artifacts | `C:\WDAC\Source` / `Events` file inventory with SHA-256, and the log list |
+
 > [!TIP]
-> Keep the evidence files (`C:\WDAC\Logs\CI-Evidence-*.csv/.md`, transcripts, and `C:\WDAC\Compiled\*.cip` hashes) as your STIG audit package.
+> Keep the evidence files (`C:\WDAC\Logs\CI-Evidence-*.csv/.md`, the run report, transcripts, and `C:\WDAC\Compiled\*.cip` hashes) as your STIG audit package.
 
 ---
 
@@ -629,13 +652,17 @@ The policy is unsigned and has `Enabled:Update Policy No Reboot`, so every optio
 
 ### Option A — Fix-Forward: Back to Audit Mode Without Removing the Policy
 
-Bump `Base-Audit-Merged.xml` above the enforced version and apply it. Then capture the new app (Steps 3 – 5) and enforce again with a higher version.
+Stamp `Base-Audit-Merged.xml` with the next date-based version, which is always above the enforced one, and apply it. Then capture the new app (Steps 3 – 5) and enforce again; script 6 picks an even higher version.
 
 ```powershell
+Set-Location C:\WDAC-Scripts                                  # the folder that holds WDAC-Version.ps1
+. .\WDAC-Version.ps1
 $RollbackXml = 'C:\WDAC\Source\Base-Audit-Merged.xml'
 $PolicyGuid  = (Get-Content -LiteralPath 'C:\WDAC\Source\PolicyGuid.txt' -Raw).Trim()
 $CipFile     = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
-Set-CIPolicyVersion -FilePath $RollbackXml -Version '2026.10.21.4' -ErrorAction Stop
+$Known       = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Version     = (Get-WdacNextVersion -Known $Known).Versions[0]   # e.g. 2026.10.24.1
+Set-CIPolicyVersion -FilePath $RollbackXml -Version $Version -ErrorAction Stop
 ConvertFrom-CIPolicy -XmlFilePath $RollbackXml -BinaryFilePath $CipFile -ErrorAction Stop
 & "$env:SystemRoot\System32\CiTool.exe" --update-policy $CipFile -json
 ```
@@ -694,6 +721,7 @@ Restore-VMCheckpoint -VMName 'WIN11-PAW-WDAC' -Name 'Pre-WDAC-Manual-Walkthrough
 | `8_validate_multipolicy_layout.ps1` | — |
 | `Get-Blocked_CI_Events.ps1` | — (last 15 min of `3077`) |
 | `Export-CIEventEvidence.ps1` | `-EvtxPath` · `-StartTime` (default: `AuditRoundStart.txt`) · `-EventId` (`3076` \| `3077`) · `-OutCsv` / `-OutMd` (default: `C:\WDAC\Logs\CI-Evidence-<id>-<timestamp>.*`) |
+| `New-WDACRunReport.ps1` | `-OutHtml` (default: `C:\WDAC\Logs\WDAC-Run-Report-<timestamp>.html`) · `-Title` · `-BlockTestPattern` (`''`) · `-NotesMarkdown` · `-EnforcedSince` (default: time the enforced `.cip` archive was written) |
 
 Files the scripts produce:
 
@@ -718,7 +746,7 @@ Both editions have the same file names and behavior. The 5.1 copies in `scripts\
 4. ASCII-only text.
 5. A `#Requires -PSEdition Desktop` guard on the scripts that use ConfigCI.
 
-`Export-CIEventEvidence.ps1` needs no ConfigCI and is identical in both folders.
+`Export-CIEventEvidence.ps1`, `New-WDACRunReport.ps1` and `WDAC-Version.ps1` (the date-based version helper, dot-sourced by scripts 1, 4 and 6) need no ConfigCI and are identical in both folders. `WDAC-Version.ps1` is also identical to the copy in `C:\WDAC\GPO\scripts\`.
 
 ## Appendix C — Agent Handover and Audit Log Protocol
 

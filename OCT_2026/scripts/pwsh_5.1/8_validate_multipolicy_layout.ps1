@@ -5,7 +5,7 @@ Get-ChildItem -LiteralPath "$env:SystemRoot\System32\CodeIntegrity\CiPolicies\Ac
     Select-Object Name, Length, LastWriteTime
 Test-Path "$env:SystemRoot\System32\CodeIntegrity\SiPolicy.p7b"   # Expect: False
 
-# 2. Confirm CiTool reports PAW-WDAC-Enforced (v2026.10.21.3) with IsEnforced = True and IsAuthorized = True
+# 2. Confirm CiTool reports PAW-WDAC-Enforced (the version script 6 stamped) with IsEnforced = True and IsAuthorized = True
 (& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies |
     Where-Object { -not $_.IsSystemPolicy } |
     Format-List PolicyID, BasePolicyID, FriendlyName, Version, VersionString, IsEnforced, IsAuthorized

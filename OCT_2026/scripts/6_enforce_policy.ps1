@@ -34,9 +34,15 @@ foreach ($OptOff in @(3, 14, 15, 18, 19, 20)) {
     Set-RuleOption -FilePath $EnforceXml -Option $OptOff -Delete -ErrorAction Stop
 }
 
-# 2. Stamp helpful PolicyName, PolicyId, and bumped VersionEx (2026.10.21.3) - DO NOT use -ResetPolicyID!
+# 2. Stamp helpful PolicyName, PolicyId, and the next version - YYYY.MM.DD.N, higher than the screened audit policy and
+#    anything active (WDAC-Version.ps1) - DO NOT use -ResetPolicyID!
+. "$PSScriptRoot\WDAC-Version.ps1"
+$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $AuditXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Next = Get-WdacNextVersion -Known $Known
+$Version = $Next.Versions[0]
+Write-Host "Policy version $Version ($($Next.Basis); highest known: $($Next.Highest))" -ForegroundColor Cyan
 Set-CIPolicyIdInfo -FilePath $EnforceXml -PolicyName 'PAW-WDAC-Enforced' -PolicyId 'PAW-ENFORCED-v3' -ErrorAction Stop
-Set-CIPolicyVersion -FilePath $EnforceXml -Version '2026.10.21.3' -ErrorAction Stop
+Set-CIPolicyVersion -FilePath $EnforceXml -Version $Version -ErrorAction Stop
 
 # 3. Verify Multi-Policy Suitability & Enforce Readiness before compiling
 [xml]$EnfDoc = Get-Content -LiteralPath $EnforceXml
@@ -101,7 +107,7 @@ $CipFile = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
 try { ConvertFrom-CIPolicy -XmlFilePath $EnforceXml -BinaryFilePath $CipFile -ErrorAction Stop }
 catch { throw "STOP: Compiling $EnforceXml failed: $($_.Exception.Message) Run 3_1_validate_winevent_rules.ps1 on Events-Allow.xml, re-run script 4, then repeat Step 6. Nothing was deployed." }
 if (-not (Test-Path -LiteralPath $CipFile)) { throw "STOP: Compile did not produce $CipFile." }
-Copy-Item -LiteralPath $CipFile -Destination 'C:\WDAC\Compiled\PAW-WDAC-Enforced_v2026.10.21.3.cip' -Force -ErrorAction Stop
+Copy-Item -LiteralPath $CipFile -Destination "C:\WDAC\Compiled\PAW-WDAC-Enforced_v$Version.cip" -Force -ErrorAction Stop
 
 # Record SHA256 hash of the enforced .cip binary for your audit evidence
 Get-FileHash -LiteralPath $CipFile -Algorithm SHA256 | Format-List
