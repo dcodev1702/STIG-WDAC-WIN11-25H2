@@ -1,0 +1,48 @@
+**********************
+PowerShell transcript start
+Start time: 20261023190016
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $__claudeCodeScript = $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT; $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT = $null; Invoke-Expression -Command $__claudeCodeScript
+Process ID: 7244
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Next: .\4_GPO_validate_gpos.ps1, then .\3_GPO_set_mode.ps1 -Mode Audit
+
+Status Check                  Detail
+------ -----                  ------
+OK     Inputs                 package C:\WDAC\GPO\Packages\20261023-185944 | OU OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local | PDC DC25-1.skynet-home.local | task every 4 h
+OK     Audit GPO              created 'JMSC-WDAC-PAWS - AppControl Audit' {85b428c6-dd0f-4a6a-b672-ac7f70716a6c}
+OK     Audit SYSVOL           \\DC25-1.skynet-home.local\SYSVOL\skynet-home.local\Policies\{85B428C6-DD0F-4A6A-B672-AC7F70716A6C}\Machine\Scripts\Startup\WDAC <- {75AFC1CF-5372-491A-80CA-7BBB694F0A00}.cip, Deploy-WDACPolicy.ps1,
+                              manifest.json
+OK     Audit startup script   powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File
+                              "\\skynet-home.local\SysVol\skynet-home.local\Policies\{85B428C6-DD0F-4A6A-B672-AC7F70716A6C}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode Audit
+OK     Audit scheduled task   WDAC-GPO-Deploy-Audit - SYSTEM, at creation (+1 min) and every 4 h, removed when no longer applied
+OK     Audit GPO version      computer version 2; CSEs [{00000000-0000-0000-0000-000000000000}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}][{35378EAC-683F-11D2-A89A-00C04FBBCFA2}{D02B1F72-3407-48AE-BA88-E8213C6761F1}][{42B5FAAE-6536-11D
+                              2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}][{AADCED64-746C-4633-A97C-D61349046527}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}]
+OK     Audit link             linked to OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local (DISABLED)
+OK     Enforce GPO            created 'JMSC-WDAC-PAWS - AppControl Enforce' {432b37d5-1a72-4372-b157-5cbad32eb908}
+OK     Enforce SYSVOL         \\DC25-1.skynet-home.local\SYSVOL\skynet-home.local\Policies\{432B37D5-1A72-4372-B157-5CBAD32EB908}\Machine\Scripts\Startup\WDAC <- {75AFC1CF-5372-491A-80CA-7BBB694F0A00}.cip, Deploy-WDACPolicy.ps1,
+                              manifest.json
+OK     Enforce startup script powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File
+                              "\\skynet-home.local\SysVol\skynet-home.local\Policies\{432B37D5-1A72-4372-B157-5CBAD32EB908}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode Enforce
+OK     Enforce scheduled task WDAC-GPO-Deploy-Enforce - SYSTEM, at creation (+1 min) and every 4 h, removed when no longer applied
+OK     Enforce GPO version    computer version 2; CSEs [{00000000-0000-0000-0000-000000000000}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}][{35378EAC-683F-11D2-A89A-00C04FBBCFA2}{D02B1F72-3407-48AE-BA88-E8213C6761F1}][{42B5FAAE-6536-11D
+                              2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}][{AADCED64-746C-4633-A97C-D61349046527}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}]
+OK     Enforce link           linked to OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local (DISABLED)
+OK     Version order          Audit v2026.10.21.4 < Enforce v2026.10.21.5
+GPO create / update: PASSED. Results: C:\WDAC\GPO\Logs\2_GPO_create_gpos-20261023-190016.csv
+**********************
+PowerShell transcript end
+End time: 20261023190019
+**********************

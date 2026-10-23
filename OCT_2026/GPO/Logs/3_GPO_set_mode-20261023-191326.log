@@ -1,0 +1,32 @@
+**********************
+PowerShell transcript start
+Start time: 20261023191326
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $__claudeCodeScript = $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT; $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT = $null; Invoke-Expression -Command $__claudeCodeScript
+Process ID: 6916
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Next: on an endpoint wait for the next refresh (or gpupdate /target:computer /force), give the task ~2 minutes, then .\5_GPO_validate_endpoint.ps1 -ExpectedMode Enforce
+
+Status Check                    Detail
+------ -----                    ------
+OK     Audit link               JMSC-WDAC-PAWS - AppControl Audit: enabled=False (was True) - package v2026.10.21.4
+OK     Enforce link             JMSC-WDAC-PAWS - AppControl Enforce: enabled=True (was False) - package v2026.10.21.5
+OK     Mode                     OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local is now in mode 'Enforce'
+OK     gpupdate (this computer) Updating policy... Computer Policy update has completed successfully.
+Set mode Enforce: PASSED. Results: C:\WDAC\GPO\Logs\3_GPO_set_mode-20261023-191326.csv
+**********************
+PowerShell transcript end
+End time: 20261023191333
+**********************

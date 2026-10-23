@@ -1,0 +1,5 @@
+"Status","Check","Detail"
+"OK","Audit link","JMSC-WDAC-PAWS - AppControl Audit: enabled=False (was True) - package v2026.10.21.4"
+"OK","Enforce link","JMSC-WDAC-PAWS - AppControl Enforce: enabled=True (was False) - package v2026.10.21.5"
+"OK","Mode","OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local is now in mode 'Enforce'"
+"OK","gpupdate (this computer)","Updating policy... Computer Policy update has completed successfully."

@@ -1,0 +1,2 @@
+"Status","Check","Detail"
+"OK","WIN11-PAW-WDAC remove {75AFC1CF-5372-491A-80CA-7BBB694F0A00}","before: PAW-WDAC-Enforced v2026.10.21.3 active=True | CiTool: {""OperationResult"":0} | after: not present | STIG now 2 / 1 (a reboot completes the removal)"

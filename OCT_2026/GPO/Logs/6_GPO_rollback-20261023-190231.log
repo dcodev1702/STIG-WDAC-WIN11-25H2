@@ -1,0 +1,28 @@
+**********************
+PowerShell transcript start
+Start time: 20261023190231
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $__claudeCodeScript = $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT; $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT = $null; Invoke-Expression -Command $__claudeCodeScript
+Process ID: 3228
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+Status Check                                                        Detail
+------ -----                                                        ------
+OK     WIN11-PAW-WDAC remove {75AFC1CF-5372-491A-80CA-7BBB694F0A00} before: PAW-WDAC-Enforced v2026.10.21.3 active=True | CiTool: {"OperationResult":0} | after: not present | STIG now 2 / 1 (a reboot completes the removal)
+Rollback (RemovePolicy): PASSED. Results: C:\WDAC\GPO\Logs\6_GPO_rollback-20261023-190231.csv
+**********************
+PowerShell transcript end
+End time: 20261023190233
+**********************
