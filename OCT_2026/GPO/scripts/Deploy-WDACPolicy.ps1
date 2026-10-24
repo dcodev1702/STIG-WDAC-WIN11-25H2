@@ -3,11 +3,15 @@
 # Deploys the multiple-policy-format .cip file(s) listed in manifest.json with CiTool.exe when the GPO carries a NEWER
 # version than the one active on this computer. It never downgrades and never removes a policy.
 #   Log:    C:\Windows\Logs\WDAC-GPO\Deploy-WDACPolicy.log
-#   Events: Application log, source WDAC-GPO (1000 current, 1001 deployed, 2001 newer active, 2002 other base, 2003 scope, 3xxx error)
+#   Events: Application log, source WDAC-GPO (1000 current, 1001 deployed, 2001 newer active, 2002 other base, 2003 scope,
+#           2005 not confirmed, 3xxx error - 3006 = confirmation needed in a non-interactive session)
 #   State:  C:\ProgramData\WDAC-GPO\state.json
+# A manual run asks Y/N (yellow) before it deploys; the GPO startup script and scheduled task pass -NoConfirm.
 param(
     [ValidateSet('Audit', 'Enforce')][string]$Mode,
-    [string]$PayloadPath = $PSScriptRoot
+    [string]$PayloadPath = $PSScriptRoot,
+    # Deploy without the Y/N prompt (GPO startup script, scheduled task, other automation); default: ask
+    [switch]$NoConfirm
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +30,23 @@ function Write-Log([string]$Level, [int]$EventId, [string]$Message) {
     $Type = switch ($Level) { 'ERROR' { 'Error' } 'WARN' { 'Warning' } default { 'Information' } }
     try { Write-EventLog -LogName Application -Source $Source -EventId $EventId -EntryType $Type -Message $Message } catch { }
     Write-Output $Line
+}
+# Win32_DeviceGuard values: 0 = OFF, 1 = AUDIT, 2 = ENFORCING (V-243450 kernel mode, V-243451 user mode; only 2 passes)
+function Format-CiStatus([int]$Value) { "$Value ($(switch ($Value) { 0 { 'OFF' } 1 { 'AUDIT' } 2 { 'ENFORCING' } default { 'UNKNOWN' } }))" }
+# Yellow warning + Y/N before a policy changes, unless -NoConfirm. Returns yes | no | noninteractive (never waits without a console).
+function Confirm-Deploy([string]$Text) {
+    if ($NoConfirm) { return 'yes' }
+    Write-Host "WARNING: this changes App Control on $($env:COMPUTERNAME) - $Text" -ForegroundColor Yellow
+    $Interactive = [Environment]::UserInteractive -and @([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-noni' }).Count -eq 0
+    try { if ([Console]::IsInputRedirected) { $Interactive = $false } } catch { }
+    if (-not $Interactive) { return 'noninteractive' }
+    for ($Try = 1; $Try -le 3; $Try++) {
+        $Answer = "$(Read-Host 'Continue? [Y/N]')".Trim()
+        if ($Answer -match '^(y|yes)$') { return 'yes' }
+        if ($Answer -match '^(n|no)$') { return 'no' }
+        Write-Host 'Please answer Y or N.' -ForegroundColor Yellow
+    }
+    return 'no'
 }
 
 $Mutex = New-Object System.Threading.Mutex($false, 'Global\WDAC-GPO-Deploy')
@@ -69,6 +90,11 @@ try { do {
             Write-Log 'INFO' 1000 "$($P.Name) {$Guid}: v$($P.Version) ($($Manifest.Mode)) is already active. $Run"
             $Entry.Action = 'Current'; $Entry.After = $Current.VersionString
         }
+        elseif (($Confirmed = Confirm-Deploy "deploy $($P.Name) v$($P.Version) ($($Manifest.Mode)), active now: $(if ($Entry.Before) { "v$($Entry.Before)" } else { 'none' })") -ne 'yes') {
+            if ($Confirmed -eq 'noninteractive') { Write-Log 'ERROR' 3006 "$($P.Name) {$Guid}: v$($P.Version) NOT deployed - this session cannot answer the Y/N confirmation. The GPO startup script and task pass -NoConfirm; add it to other automation. $Run" }
+            else { Write-Log 'WARN' 2005 "$($P.Name) {$Guid}: v$($P.Version) NOT deployed - not confirmed at the prompt. $Run" }
+            $Entry.Action = 'Not confirmed'; $Entry.After = $Entry.Before; $ExitCode = 1
+        }
         else {
             $Local = Join-Path $StateDir $P.File
             Copy-Item -LiteralPath $File -Destination $Local -Force
@@ -94,7 +120,7 @@ try { do {
     $State.Result = if ($ExitCode) { 'Error' } elseif ($Changed) { 'Deployed' } else { 'NoChange' }
     if ($Changed) { $State.LastChange = (Get-Date).ToString('o') }
     $Level = if ($State.UMCI -eq $Expected) { 'INFO' } else { 'WARN' }
-    Write-Log $Level $(if ($Level -eq 'INFO') { 1002 } else { 2004 }) "Win32_DeviceGuard KMCI/UMCI = $($State.KMCI) / $($State.UMCI) (expected UMCI $Expected for $($Manifest.Mode))."
+    Write-Log $Level $(if ($Level -eq 'INFO') { 1002 } else { 2004 }) "Win32_DeviceGuard V-243450 kernel = $(Format-CiStatus $State.KMCI), V-243451 user = $(Format-CiStatus $State.UMCI) (expected user $(Format-CiStatus $Expected) for $($Manifest.Mode))."
 } while ($false) }
 catch {
     Write-Log 'ERROR' 3000 "Unexpected error: $($_.Exception.Message)"

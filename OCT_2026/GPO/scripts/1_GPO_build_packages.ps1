@@ -36,11 +36,15 @@ try {
     if ([version]$EnforceVersion -le [version]$AuditVersion) { throw "STOP: EnforceVersion ($EnforceVersion) must be higher than AuditVersion ($AuditVersion)." }
 
     # ---------------------------------------------------------------- build both XMLs from the enforced source
+    #   Packages\<stamp>\xml\ (never published) keeps the exact XML behind each .cip, named like the policy and its version,
+    #   plus a copy of the source XML with its own version, so every package can be traced and rebuilt
     $Pkg = Join-Path $Cfg.PackageRoot $Cfg.Stamp
     $Work = Join-Path $Pkg 'xml'
     New-Item -Path $Work, (Join-Path $Pkg 'Audit'), (Join-Path $Pkg 'Enforce') -ItemType Directory -Force | Out-Null
-    $Xml = @{ Audit = (Join-Path $Work 'GPO-Audit.xml'); Enforce = (Join-Path $Work 'GPO-Enforce.xml') }
     $Ver = @{ Audit = $AuditVersion; Enforce = $EnforceVersion }
+    $Xml = @{ Audit = (Join-Path $Work "$($Cfg.PolicyNamePrefix)-Audit_v$AuditVersion.xml"); Enforce = (Join-Path $Work "$($Cfg.PolicyNamePrefix)-Enforce_v$EnforceVersion.xml") }
+    $SrcDoc = New-Object System.Xml.XmlDocument; $SrcDoc.Load($EnforceXml)
+    Copy-Item -LiteralPath $EnforceXml -Destination (Join-Path $Work ("source_{0}_v{1}.xml" -f [IO.Path]::GetFileNameWithoutExtension($EnforceXml), $SrcDoc.SiPolicy.VersionEx)) -Force -ErrorAction Stop
     foreach ($Mode in 'Audit', 'Enforce') {
         Copy-Item -LiteralPath $EnforceXml -Destination $Xml[$Mode] -Force
         if ($Mode -eq 'Audit') { Set-RuleOption -FilePath $Xml[$Mode] -Option 3 -ErrorAction Stop } else { Set-RuleOption -FilePath $Xml[$Mode] -Option 3 -Delete -ErrorAction Stop }

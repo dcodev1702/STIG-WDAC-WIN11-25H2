@@ -3,7 +3,8 @@
 #   .\5_GPO_validate_endpoint.ps1 -ComputerName PAW01,PAW02        # remote (WinRM) endpoints
 #   .\5_GPO_validate_endpoint.ps1 -ExpectedMode Enforce            # no GroupPolicy module needed
 # Checks: computer in the OU, which WDAC GPO applied, scheduled task, deployment log/events/state, CiTool version = the GPO's
-# package, .cip on disk, Event 3099, Win32_DeviceGuard (Audit: UMCI 1 / Enforce: 2 / 2 = STIG PASS), 3076/3077 counts.
+# package, .cip on disk, Event 3099, Win32_DeviceGuard (0 = OFF, 1 = AUDIT, 2 = ENFORCING; Audit: UMCI 1 / Enforce: 2 / 2 = STIG
+# PASS), 3076/3077 counts.
 param(
     [string[]]$ComputerName = @($env:COMPUTERNAME),
     [ValidateSet('Audit', 'Enforce')][string]$ExpectedMode,
@@ -85,9 +86,9 @@ try {
         Add-WdacResult $R $(if ($VerOk) { 'OK' } else { 'FAIL' }) "$C active policy" $(if ($P) { "$($P.FriendlyName) {$($P.PolicyID)} v$($P.VersionString) active=$($P.IsEnforced) authorized=$($P.IsAuthorized) (GPO package v$($Base.Version))" } else { 'policy not present' })
         Add-WdacResult $R $(if ($X.CipOnDisk) { 'OK' } else { 'FAIL' }) "$C .cip on disk" "CiPolicies\Active\$($Base.PolicyGuid).cip present=$($X.CipOnDisk)"
         Add-WdacResult $R $(if ($X.Ev3099) { 'OK' } else { 'WARN' }) "$C Event 3099" $(if ($X.Ev3099) { $X.Ev3099 -join '' } else { "none since $($X.Since)" })
-        $Stig = "$($X.KMCI) / $($X.UMCI)"
+        $Stig = Format-WdacStig $X.KMCI $X.UMCI
         $StigOk = if ($ExpectedMode -eq 'Enforce') { $X.KMCI -eq 2 -and $X.UMCI -eq 2 } else { $X.UMCI -eq 1 }
-        Add-WdacResult $R $(if ($StigOk) { 'OK' } else { 'FAIL' }) "$C Win32_DeviceGuard" "$Stig - $(if ($ExpectedMode -eq 'Enforce') { if ($StigOk) { 'V-243450 & V-243451 PASS' } else { 'expected 2 / 2' } } else { 'audit mode (UMCI 1) expected' })"
+        Add-WdacResult $R $(if ($StigOk) { 'OK' } else { 'FAIL' }) "$C Win32_DeviceGuard" "$Stig - $(if ($ExpectedMode -eq 'Enforce') { if ($StigOk) { 'both PASS' } else { 'expected 2 (ENFORCING) for both' } } else { 'user mode 1 (AUDIT) expected in Audit mode: V-243451 stays open until Enforce' })"
         $Expected = @($X.BlockedFiles | Where-Object { $BlockTestPattern -and $_ -match $BlockTestPattern })
         $Unexpected = @($X.BlockedFiles | Where-Object { -not ($BlockTestPattern -and $_ -match $BlockTestPattern) })
         Add-WdacResult $R $(if ($ExpectedMode -eq 'Audit' -or $Unexpected.Count -eq 0) { 'OK' } else { 'WARN' }) "$C events since $($X.Since)" "3076 (would block) = $($X.Count3076), 3077 (blocked) = $($X.Count3077)$(if ($ExpectedMode -eq 'Audit' -and $X.Count3076) { ' - review with C:\WDAC\config\scripts\Export-CIEventEvidence.ps1 before enforcing' })"

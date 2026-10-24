@@ -33,18 +33,9 @@
 
 ### 1.1 Architecture
 
-```text
- Reference device (fully configured, STIG 2/2)          Domain (SYSVOL + AD)                         Endpoints in the target OU
- ----------------------------------------------         ------------------------------------         ---------------------------------
- C:\WDAC\Source\Base-Enforce.xml                        GPO "...AppControl Audit"   (link ON|off)    Startup script (boot, SYSTEM)
-   |  1_GPO_build_packages.ps1                            Machine\Scripts\Startup\WDAC\              GPP task WDAC-GPO-Deploy-<Mode>
-   v                                                        {GUID}.cip  v N   (Audit Mode)             (at creation + every 4 h)
- C:\WDAC\GPO\Packages\<stamp>\Audit\   v N            -->   manifest.json  Deploy-WDACPolicy.ps1  -->      |
- C:\WDAC\GPO\Packages\<stamp>\Enforce\ v N+1              scripts.ini + ScheduledTasks.xml            Deploy-WDACPolicy.ps1:
-   |  2_GPO_create_gpos.ps1                             GPO "...AppControl Enforce" (link off|ON)      verify SHA-256 -> compare version
-   +------------------------------------------------>      same layout, {GUID}.cip v N+1             -> CiTool --update-policy if newer
-                                                         3_GPO_set_mode.ps1 enables ONE link          -> log + event + state.json
-```
+![WDAC multi-policy GPO deployment: a reference device builds an Audit and an Enforce package from one enforced policy and publishes them to two GPOs in SYSVOL; both GPOs are linked to the target OU with one link enabled; Windows 11 endpoints run Deploy-WDACPolicy.ps1 as SYSTEM from the startup script and a scheduled task, verify the SHA-256 hash and deploy the {GUID}.cip with CiTool only when the version is higher; Win32_DeviceGuard then reports V-243450 and V-243451, where 0 is OFF, 1 is AUDIT and 2 is ENFORCING](images/WDAC-GPO-Architecture.png)
+
+<sub>Source: [`images/WDAC-GPO-Architecture.svg`](images/WDAC-GPO-Architecture.svg) · 1600 × 1828. The PNG is rendered from the SVG at 2x: edit the SVG, then re-render the PNG, and keep both.</sub>
 
 ### 1.2 How the Two GPOs Work Together
 
@@ -68,6 +59,9 @@
 | Domain | `skynet-home.local`, domain mode Windows Server 2025, DC `DC25-1` |
 | GPOs | `JMSC-WDAC-PAWS - AppControl Audit` / `JMSC-WDAC-PAWS - AppControl Enforce` |
 | Result | A **first-time deployment** from no policy: Audit v`2026.10.21.4` (STIG `2/1`), then Enforce v`2026.10.21.5` in place (**STIG `2/2`**). Survives a cold boot (startup script *and* task). Approved apps work; the block-test app is blocked. Full record: `C:\WDAC\GPO\Logs\GPO-Walkthrough-Log.md`. |
+| Enforce → Audit (§10.2) | Switched the OU to Audit first, then published a new, higher pair. Devices moved in place from Enforce v`2026.10.21.5` to Audit v`2026.10.24.1`, with no reboot. |
+| Y/N and `-NoConfirm` | The endpoint script ran under SYSTEM with `-NoConfirm` from the GPO and deployed Audit v`2026.10.24.3`. Without `-NoConfirm`, steps 2, 3 and 6 and the endpoint script stopped before changing anything (Event 3006 on the endpoint). |
+| Adding applications (§10.1) | Git, GitHub CLI and the Az module were added in a later audit round (config README §11 Option D), with the reference device kept in Audit (`6_enforce_policy.ps1 -PrepareOnly`). The new pair was published with the OU in Audit, and endpoints moved in place to Audit v`2026.10.24.11`. The tools logged 0 new `3076` events. |
 
 ---
 
@@ -75,7 +69,7 @@
 
 | Where | Requirement |
 |---|---|
-| **Reference device** | Finished `C:\WDAC\config\README.md`: `C:\WDAC\Source\Base-Enforce.xml` + `PolicyGuid.txt`, the enforced policy active, STIG `2 / 2`. Windows 11 Enterprise 22H2+ with **RSAT Group Policy + AD** (`Get-WindowsCapability -Online -Name Rsat.GroupPolicy*, Rsat.ActiveDirectory* \| Add-WindowsCapability -Online`) and ConfigCI (inbox). |
+| **Reference device** | Finished `C:\WDAC\config\README.md`: `C:\WDAC\Source\Base-Enforce.xml` + `PolicyGuid.txt`, the enforced policy active, STIG `2 / 2`. For a later round the device may stay in Audit, with `Base-Enforce.xml` prepared by `6_enforce_policy.ps1 -PrepareOnly` (§10.1). Windows 11 Enterprise 22H2+ with **RSAT Group Policy + AD** (`Get-WindowsCapability -Online -Name Rsat.GroupPolicy*, Rsat.ActiveDirectory* \| Add-WindowsCapability -Online`) and ConfigCI (inbox). |
 | **Rights** | **Domain Admins**, or **Group Policy Creator Owners** plus *Link GPOs* permission on the target OU |
 | **Endpoints** | Windows 11 Enterprise **22H2 or later** (`CiTool.exe`), domain-joined, **in the target OU**. Read access to SYSVOL is the default. WinRM only for remote validation. |
 | **Scope** | Windows client editions only. The endpoint script **skips** servers and domain controllers (`ProductType ≠ 1`). |
@@ -110,15 +104,27 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once. Any script parameter with
 
 All scripts are in `C:\WDAC\GPO\scripts\`. Each one writes a transcript and a PASS/WARN/FAIL CSV to `C:\WDAC\GPO\Logs\`, and stops with `STOP:` on any failure.
 
+> [!IMPORTANT]
+> **Steps 2, 3 and 6 ask before they change anything.** Each prints in **yellow** what is about to change, then waits for `Continue? [Y/N]`:
+> - **Step 2** shows the versions it will publish and which link is enabled. The devices behind the enabled link pick up the new version on their own.
+> - **Step 3** shows the OU's mode before and after. **Enforce** means every file the policy does not allow is blocked on every device in the OU.
+> - **Step 6** shows what it will disable, remove or delete.
+>
+> Type **Y** to go ahead. **N**, or no valid answer after three tries, stops the script with nothing changed and a `FAIL` row in the results.
+>
+> **For unattended runs, add `-NoConfirm`.** Step 6 also takes `-WhatIf` to preview. A non-interactive session without `-NoConfirm` stops before changing anything, so automation must pass it.
+>
+> **On the endpoints, the GPO already runs `Deploy-WDACPolicy.ps1 -NoConfirm`,** because SYSTEM has no console to answer. Step 4 fails a GPO whose startup script or task lacks it. If you run `Deploy-WDACPolicy.ps1` by hand, it asks too, but only when it is about to deploy a new version.
+
 | # | Script | Runs on | Changes | Success looks like |
 |:---:|---|---|---|---|
 | 0 | `0_GPO_pre-flight.ps1` | reference device | nothing (read-only) | `GPO pre-flight: PASSED` |
 | 1 | `1_GPO_build_packages.ps1` | reference device | local files in `Packages\<stamp>\` | `Package build: PASSED`; Audit v N < Enforce v N+1 |
-| 2 | `2_GPO_create_gpos.ps1` | reference device | creates/updates both GPOs; links them **disabled** | `GPO create / update: PASSED` |
+| 2 | `2_GPO_create_gpos.ps1` | reference device | creates/updates both GPOs; links them **disabled** (asks first) | `GPO create / update: PASSED` |
 | 4 | `4_GPO_validate_gpos.ps1` | reference device | nothing | `GPO validation: PASSED`; *Active mode: None* |
-| 3 | `3_GPO_set_mode.ps1 -Mode Audit` | reference device | enables the Audit link | `Set mode Audit: PASSED` |
+| 3 | `3_GPO_set_mode.ps1 -Mode Audit` | reference device | enables the Audit link (asks first) | `Set mode Audit: PASSED` |
 | 5 | `5_GPO_validate_endpoint.ps1` | reference device → endpoint(s) | nothing | `Endpoint validation (Audit): PASSED`; UMCI 1 |
-| 3 | `3_GPO_set_mode.ps1 -Mode Enforce` | reference device | switches to the Enforce link | `Set mode Enforce: PASSED` |
+| 3 | `3_GPO_set_mode.ps1 -Mode Enforce` | reference device | switches to the Enforce link (asks first) | `Set mode Enforce: PASSED` |
 | 5 | `5_GPO_validate_endpoint.ps1 -BlockTestPattern <regex>` | reference device → endpoint(s) | nothing | `Endpoint validation (Enforce): PASSED`; **STIG 2 / 2** |
 | 6 | `6_GPO_rollback.ps1 -Action …` | reference device / endpoint | rollback / removal (asks first) | as stated |
 
@@ -154,7 +160,7 @@ Set-Location C:\WDAC\GPO\scripts
 | Target OU and **every member**, with OS | Windows client editions. Anything else is WARN; the endpoint script skips it. |
 | GPOs already linked to the OU; whether the two GPOs exist | "will create" or "will UPDATE" |
 | `Base-Enforce.xml`: GUID = `PolicyGuid.txt`, base policy, **Audit Mode OFF**, Option 13 | OK |
-| Reference device: that policy **active at the same version**, STIG | `2 / 2` |
+| Reference device: that policy **active at the same version**, STIG | `2 / 2`. Expect two WARNs (active version differs, STIG `2 / 1`) when the device stays in Audit for a later round. |
 | Local supplemental policies | listed as *NOT packaged* unless you pass them to step 1 |
 | `CiTool.exe` / build | build ≥ 22621 |
 | Next package versions | the pair step 1 would build, e.g. *"Audit 2026.10.23.1 / Enforce 2026.10.23.2 - today …; highest known v… (… 2 published GPO payload(s))"* |
@@ -177,7 +183,7 @@ If the reference device sits in the target OU and runs a GPO-deployed version, t
    - both copies have the same GUID and are base policies;
    - the options differ **only** by `Enabled:Audit Mode`;
    - `<EKUs>`, `<FileRules>`, `<Signers>`, `<SigningScenarios>`, `<UpdatePolicySigners>` and `<CiSigners>` are **byte-identical**.
-4. **Output.** Compiled into `C:\WDAC\GPO\Packages\<stamp>\{Audit,Enforce}\`, each with `{GUID}.cip`, `manifest.json` (GUID, version, SHA-256, mode, source XML hash) and a copy of `Deploy-WDACPolicy.ps1`. `Packages\latest.txt` points to the new folder.
+4. **Output.** Compiled into `C:\WDAC\GPO\Packages\<stamp>\{Audit,Enforce}\`, each with `{GUID}.cip`, `manifest.json` (GUID, version, SHA-256, mode, source XML hash) and a copy of `Deploy-WDACPolicy.ps1`. `Packages\latest.txt` points to the new folder. `Packages\<stamp>\xml\` (never published) keeps the exact XML behind each `.cip`, named with its version (`<prefix>-Audit_v<N>.xml`, `<prefix>-Enforce_v<N+1>.xml`), plus `source_Base-Enforce_v<version>.xml`, so every package can be traced and rebuilt.
 
 **Proven output** (test build with date-based versions, after the proving ground had published `2026.10.21.4` / `.5`):
 
@@ -210,7 +216,7 @@ Package build: PASSED.
 | GPO status | `UserSettingsDisabled` |
 | Registry setting | *Always wait for the network at computer startup and logon* = Enabled, so the startup script has network |
 | Payload | Copied to `\\<PDC>\SYSVOL\<domain>\Policies\{GPO}\Machine\Scripts\Startup\WDAC\`, replacing any earlier payload |
-| Startup script | `scripts.ini`: `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\\<domain>\SysVol\<domain>\Policies\{GPO}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode <Mode>` |
+| Startup script | `scripts.ini`: `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\\<domain>\SysVol\<domain>\Policies\{GPO}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode <Mode> -NoConfirm` |
 | GPP scheduled task | `WDAC-GPO-Deploy-<Mode>`: SYSTEM; runs at task creation (+1 min) and every `TaskIntervalHours`; *Replace*; **removed when the GPO no longer applies** |
 | Extensions and version | Client-side extensions registered in AD; computer version raised in AD and `GPT.INI` |
 | Link | Linked to the target OU **disabled**; an existing link is left as is |
@@ -255,7 +261,7 @@ Endpoints pick this up at their next background refresh (90 ± 30 minutes) or at
 | `state.json` / deploy log / events | `Deployed` or `NoChange` |
 | CiTool | GUID active at the **Audit package version**, authorized; `.cip` in `CiPolicies\Active` |
 | Event 3099 | *"Refreshed and activated … <prefix>-Audit. id GPO-AUDIT-<version>. Status 0x0"* |
-| `Win32_DeviceGuard` | **UMCI = 1** (KMCI 1, or 2 if platform policies already enforce kernel mode) |
+| `Win32_DeviceGuard` (`0` OFF · `1` AUDIT · `2` ENFORCING) | **V-243451 user `1 (AUDIT)`**, an open finding until Enforce. V-243450 kernel reads `1 (AUDIT)`, or `2 (ENFORCING)` if platform policies already enforce kernel mode. |
 | 3076 / 3077 since deployment | reported |
 
 ### 8.3 The Audit Period
@@ -268,7 +274,7 @@ Endpoints pick this up at their next background refresh (90 ± 30 minutes) or at
    ```
 
 3. **Gaps found?** Fix them on the **reference device**:
-   - capture and merge the missing apps with the config README loop (Steps 4–5 there), and enforce them there (Steps 6–7);
+   - capture and merge the missing apps with the config README's **§11 Option D**, which merges into `Base-Enforce.xml` (`-BaseXml`) so no earlier rule is lost, and enforce them there (Steps 6–7);
    - then **rebuild and publish**: `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` → `4_GPO_validate_gpos.ps1`;
    - audited endpoints move to the new, higher Audit version automatically.
 4. **No gaps** (only the block-test app, or nothing at all)? Go to Phase 5.
@@ -290,15 +296,15 @@ What happens on each endpoint at its next refresh:
 |---|---|
 | Applied GPOs | **Enforce GPO only** |
 | CiTool | GUID active at the **Enforce package version**, authorized |
-| `Win32_DeviceGuard` | **`2 / 2` — V-243450 & V-243451 PASS** |
+| `Win32_DeviceGuard` | **V-243450 kernel `2 (ENFORCING)` / V-243451 user `2 (ENFORCING)` — both PASS** |
 | 3077 | Only the block-test app (expected with `-BlockTestPattern`). Anything else appears as *blocks to review*. |
 
-**Proven endpoint result:**
+**Proven endpoint result** (shown in the current output format):
 
 ```text
 OK  active policy      PAW-WDAC-GPO-Enforce {75afc1cf-...} v2026.10.21.5 active=True authorized=True (GPO package v2026.10.21.5)
 OK  Event 3099         Refreshed and activated Code Integrity policy {75afc1cf-...} PAW-WDAC-GPO-Enforce. id GPO-ENFORCE-2026.10.21.5. Status 0x0
-OK  Win32_DeviceGuard  2 / 2 - V-243450 & V-243451 PASS
+OK  Win32_DeviceGuard  V-243450 kernel 2 (ENFORCING) / V-243451 user 2 (ENFORCING) - both PASS
 OK  expected blocks    matching 'Mozilla|Firefox': C:\Program Files\Mozilla Firefox\firefox.exe <- pwsh.exe; ...
 Endpoint validation (Enforce): PASSED.
 ```
@@ -313,7 +319,7 @@ Endpoint validation (Enforce): PASSED.
 
 ### 10.1 Publish an Updated Policy (Same Mode, No Reboot)
 
-1. On the reference device, change and enforce the policy with the config README.
+1. On the reference device, change the policy with the config README. To add applications, use its §11 Option D, which merges into `Base-Enforce.xml`. Then either enforce it there (Steps 6–7), or keep the device in Audit and prepare `Base-Enforce.xml` with **`6_enforce_policy.ps1 -PrepareOnly`**, which deploys nothing.
 2. Run `.\1_GPO_build_packages.ps1`. It produces a new pair with higher versions.
 3. Run `.\2_GPO_create_gpos.ps1` (it updates both GPOs in place), then `.\4_GPO_validate_gpos.ps1`.
 4. Endpoints apply the new version at their next refresh, within `TaskIntervalHours`, or at boot.
@@ -348,13 +354,16 @@ Later, `3_GPO_set_mode.ps1 -Mode Enforce` returns to Enforce **in place**, becau
 .\6_GPO_rollback.ps1 -Action DisableLinks                                  # OU -> mode None; devices KEEP their policy
 .\6_GPO_rollback.ps1 -Action RemovePolicy -ComputerName PAW01, PAW02       # CiTool --remove-policy <GUID> (WinRM)
 .\6_GPO_rollback.ps1 -Action RemoveGpos                                    # unlink + delete both GPOs
+.\6_GPO_rollback.ps1 -Action DisableLinks -WhatIf                          # preview only, nothing changes
 ```
+
+Every action asks **Y/N** once, in yellow. `-NoConfirm` skips the prompt for automation.
 
 | Action | Effect | Guard |
 |---|---|---|
-| `DisableLinks` | No more deployments; the tasks are removed at the next refresh | asks for confirmation |
-| `RemovePolicy` | `CiTool --remove-policy`. **Takes effect immediately** (proven: STIG `2 / 2` → `2 / 1` without a reboot). | **Refuses while any WDAC link is enabled**, because the GPO would redeploy it (`-Force` overrides for tests) |
-| `RemoveGpos` | Deletes both GPOs; devices keep their policy | asks for confirmation |
+| `DisableLinks` | No more deployments; the tasks are removed at the next refresh | Y/N confirmation |
+| `RemovePolicy` | `CiTool --remove-policy`. **Takes effect immediately** (proven: STIG `2 (ENFORCING) / 2 (ENFORCING)` → `2 / 1 (AUDIT)` without a reboot). | **Refuses while any WDAC link is enabled**, because the GPO would redeploy it (`-Force` overrides for tests); then Y/N confirmation |
+| `RemoveGpos` | Deletes both GPOs; devices keep their policy | Y/N confirmation |
 
 > [!TIP]
 > To relax policy on devices without removing it, publish a corrected package (§10.1), or demote to Audit (§10.2). Both keep the devices managed.
@@ -399,6 +408,9 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | Deploy log **2002** *another custom base policy* | A different base policy is active (intersection) | Remove that policy, or keep that device out of the OU |
 | Startup script didn't run at boot | No network at startup | Both GPOs enable *Always wait for the network*; the task also covers it within minutes |
 | Step 4 **FAIL** *BOTH links are enabled* | Links edited by hand in GPMC | `3_GPO_set_mode.ps1 -Mode Audit\|Enforce` |
+| Step 4 **FAIL** *startup script* / *scheduled task* lacks `-NoConfirm` | The GPO was published by an older step 2 | Build and publish a new pair: `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` |
+| Steps 2, 3, 6: **FAIL** *"needs a Y/N confirmation, but the session is non-interactive"* | Run from automation, a remote session or a redirected console | Run interactively, or add `-NoConfirm` |
+| Deploy log **3006** *NOT deployed - cannot answer the Y/N confirmation* | `Deploy-WDACPolicy.ps1` started without `-NoConfirm` by something other than the GPO | Pass `-NoConfirm`, or let the GPO run it |
 | Step 4 **FAIL** *version AD/SYSVOL* differ | Replication in progress, or a manual SYSVOL edit | Wait for replication; re-run `2_GPO_create_gpos.ps1` |
 | Unexpected **3077** under Enforce | An app was missing from the reference policy | Fix on the reference device → `1_` → `2_` (§10.1), or demote (§10.2) |
 
@@ -411,12 +423,13 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | `0_GPO_pre-flight.ps1` | `-TargetOU` |
 | `1_GPO_build_packages.ps1` | `-EnforceXml` (`<WdacRoot>\Source\Base-Enforce.xml`) · `-AuditVersion` / `-EnforceVersion` (auto: today's `YYYY.MM.DD.N` / `N+1`, above every known version; a lower explicit value is refused) · `-SupplementalXml` (`@()`) |
 | `WDAC-Version.ps1` *(helper, dot-sourced)* | `Get-WdacNextVersion`, `Get-WdacActivePolicyVersion`, `Get-WdacVersionsFromXml`, `-FromArchive`, `-FromManifests`. Identical to `C:\WDAC\config\scripts\WDAC-Version.ps1`. |
-| `2_GPO_create_gpos.ps1` | `-PackagePath` (`Packages\latest.txt`) · `-TargetOU` · `-AuditGpoName` · `-EnforceGpoName` · `-TaskIntervalHours` |
-| `3_GPO_set_mode.ps1` | **`-Mode Audit\|Enforce\|None`** · `-GpUpdate` (this computer) · `-TargetOU` · GPO names |
+| `2_GPO_create_gpos.ps1` | `-PackagePath` (`Packages\latest.txt`) · `-TargetOU` · `-AuditGpoName` · `-EnforceGpoName` · `-TaskIntervalHours` · `-NoConfirm` |
+| `3_GPO_set_mode.ps1` | **`-Mode Audit\|Enforce\|None`** · `-GpUpdate` (this computer) · `-TargetOU` · GPO names · `-NoConfirm` |
 | `4_GPO_validate_gpos.ps1` | `-TargetOU` · GPO names |
 | `5_GPO_validate_endpoint.ps1` | `-ComputerName` (this computer) · `-ExpectedMode` (from the enabled link) · `-BlockTestPattern` (`''`) · `-TargetOU` · GPO names |
-| `6_GPO_rollback.ps1` | **`-Action DisableLinks\|RemovePolicy\|RemoveGpos`** · `-ComputerName` · `-Force` · `-Confirm` / `-WhatIf` |
-| `Deploy-WDACPolicy.ps1` *(endpoint, run by the GPO)* | `-Mode Audit\|Enforce` · `-PayloadPath` (its own folder) |
+| `6_GPO_rollback.ps1` | **`-Action DisableLinks\|RemovePolicy\|RemoveGpos`** · `-ComputerName` · `-Force` · `-NoConfirm` · `-WhatIf` |
+| `Deploy-WDACPolicy.ps1` *(endpoint, run by the GPO)* | `-Mode Audit\|Enforce` · `-PayloadPath` (its own folder) · `-NoConfirm` (always passed by the GPO) |
+| `WDAC-Confirm.ps1` *(helper, dot-sourced)* | `Confirm-WdacChange`: the yellow Y/N prompt used by steps 2, 3 and 6. Identical to `C:\WDAC\config\scripts\WDAC-Confirm.ps1`. |
 
 ## Appendix B — What the GPOs Contain
 
@@ -424,7 +437,7 @@ Use this on one device in the target OU (ideally the reference device) before yo
 \\<domain>\SYSVOL\<domain>\Policies\{GPO-GUID}\
   GPT.INI                                        computer version (kept equal to AD versionNumber)
   Machine\Registry.pol                           HKLM\Software\Policies\Microsoft\Windows NT\CurrentVersion\Winlogon\SyncForegroundPolicy = 1
-  Machine\Scripts\scripts.ini                    [Startup] 0CmdLine=powershell.exe / 0Parameters=... -Mode <Mode>   (UTF-16 LE)
+  Machine\Scripts\scripts.ini                    [Startup] 0CmdLine=powershell.exe / 0Parameters=... -Mode <Mode> -NoConfirm   (UTF-16 LE)
   Machine\Scripts\Startup\WDAC\
       {POLICY-GUID}.cip                          compiled policy (Audit: version N, Enforce: N+1)
       manifest.json                              Mode, Policies[] {Type, PolicyGuid, Version, Name, File, Sha256}, source XML hash, deploy-script hash
@@ -454,5 +467,7 @@ AD: CN={GPO-GUID},CN=Policies,CN=System,<domain DN>
 | 2002 | Warning | Another custom base policy is active (intersection) |
 | 2003 | Warning | Skipped: not a Windows client edition |
 | 2004 | Warning | UMCI doesn't match the mode |
+| 2005 | Warning | Manual run: the new version was **not confirmed** at the Y/N prompt, so nothing was deployed |
 | 2010 | Warning | Another run is in progress |
 | 3000–3005 | Error | Unexpected error / no CiTool / mode mismatch / file missing / hash mismatch / CiTool failed |
+| 3006 | Error | Not deployed: the session can't answer the Y/N prompt and `-NoConfirm` was not passed. Re-publish with step 2, which adds `-NoConfirm`. |

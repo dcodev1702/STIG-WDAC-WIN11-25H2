@@ -54,16 +54,16 @@ try {
         # ------------------------------------------------------------ startup script + scheduled task definitions
         $Ini = Join-Path $Paths.SysvolPdc 'Machine\Scripts\scripts.ini'
         $IniText = if (Test-Path -LiteralPath $Ini) { [IO.File]::ReadAllText($Ini) } else { '' }
-        $IniOk = ($IniText -match '\[Startup\]' -and $IniText -match 'powershell\.exe' -and $IniText -match [regex]::Escape("$($Paths.Id)\$($Paths.PayloadRel)\Deploy-WDACPolicy.ps1") -and $IniText -match "-Mode $Mode")
-        Add-WdacResult $R $(if ($IniOk) { 'OK' } else { 'FAIL' }) "$Mode startup script" $(if ($IniOk) { (($IniText -split "`r?`n") | Where-Object { $_ -match 'Parameters=' }) -join '' } else { "scripts.ini missing or wrong ($Ini)" })
+        $IniOk = ($IniText -match '\[Startup\]' -and $IniText -match 'powershell\.exe' -and $IniText -match [regex]::Escape("$($Paths.Id)\$($Paths.PayloadRel)\Deploy-WDACPolicy.ps1") -and $IniText -match "-Mode $Mode" -and $IniText -match '-NoConfirm')
+        Add-WdacResult $R $(if ($IniOk) { 'OK' } else { 'FAIL' }) "$Mode startup script" $(if ($IniOk) { (($IniText -split "`r?`n") | Where-Object { $_ -match 'Parameters=' }) -join '' } else { "scripts.ini missing or wrong ($Ini) - it must run Deploy-WDACPolicy.ps1 -Mode $Mode -NoConfirm; re-run 2_GPO_create_gpos.ps1" })
         $TaskFile = Join-Path $Paths.SysvolPdc 'Machine\Preferences\ScheduledTasks\ScheduledTasks.xml'
         if (Test-Path -LiteralPath $TaskFile) {
             $T = New-Object System.Xml.XmlDocument; $T.Load($TaskFile)
             $Tv = $T.ScheduledTasks.TaskV2
             $TaskArgs = $Tv.Properties.Task.Actions.Exec.Arguments
             $Int = $Tv.Properties.Task.Triggers.TimeTrigger.Repetition.Interval
-            $TOk = ($Tv.name -eq "WDAC-GPO-Deploy-$Mode" -and $Tv.removePolicy -eq '1' -and $Tv.Properties.runAs -eq 'NT AUTHORITY\System' -and $TaskArgs -match "-Mode $Mode" -and $TaskArgs -match [regex]::Escape($Paths.Id))
-            Add-WdacResult $R $(if ($TOk) { 'OK' } else { 'FAIL' }) "$Mode scheduled task" "$($Tv.name) runAs $($Tv.Properties.runAs), every $Int + at creation, removePolicy=$($Tv.removePolicy)"
+            $TOk = ($Tv.name -eq "WDAC-GPO-Deploy-$Mode" -and $Tv.removePolicy -eq '1' -and $Tv.Properties.runAs -eq 'NT AUTHORITY\System' -and $TaskArgs -match "-Mode $Mode" -and $TaskArgs -match '-NoConfirm' -and $TaskArgs -match [regex]::Escape($Paths.Id))
+            Add-WdacResult $R $(if ($TOk) { 'OK' } else { 'FAIL' }) "$Mode scheduled task" "$($Tv.name) runAs $($Tv.Properties.runAs), every $Int + at creation, removePolicy=$($Tv.removePolicy)$(if ($TaskArgs -notmatch '-NoConfirm') { ' - arguments lack -NoConfirm; re-run 2_GPO_create_gpos.ps1' })"
         }
         else { Add-WdacResult $R 'FAIL' "$Mode scheduled task" "ScheduledTasks.xml missing ($TaskFile)" }
 

@@ -67,8 +67,8 @@ try {
         elseif ($Active) { Add-WdacResult $R 'WARN' 'Reference device active policy' "Active v$($Active.VersionString) differs from Base-Enforce.xml v$($S.VersionEx)" }
         else { Add-WdacResult $R 'WARN' 'Reference device active policy' 'The reference policy is not active on this device' }
         $DG = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard
-        $St = "$($DG.CodeIntegrityPolicyEnforcementStatus) / $($DG.UsermodeCodeIntegrityPolicyEnforcementStatus)"
-        Add-WdacResult $R $(if ($St -eq '2 / 2') { 'OK' } else { 'WARN' }) 'Reference device STIG (KMCI / UMCI)' $St
+        $K = [int]$DG.CodeIntegrityPolicyEnforcementStatus; $U = [int]$DG.UsermodeCodeIntegrityPolicyEnforcementStatus
+        Add-WdacResult $R $(if ($K -eq 2 -and $U -eq 2) { 'OK' } else { 'WARN' }) 'Reference device STIG' (Format-WdacStig $K $U)
         $Supp = @((& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies | Where-Object { -not $_.IsSystemPolicy -and $_.BasePolicyID -ieq $Guid.Trim('{}') -and $_.PolicyID -ne $_.BasePolicyID })
         foreach ($Sp in $Supp) { Add-WdacResult $R 'OK' "Local supplemental $($Sp.FriendlyName)" "{$($Sp.PolicyID)} v$($Sp.VersionString) - NOT packaged unless passed to 1_GPO_build_packages.ps1 -SupplementalXml" }
     }

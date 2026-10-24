@@ -10,7 +10,9 @@ param(
     [string]$AuditGpoName,
     [string]$EnforceGpoName,
     # Run 'gpupdate /target:computer /force' on THIS computer afterwards (handy on the proving-ground device)
-    [switch]$GpUpdate
+    [switch]$GpUpdate,
+    # Skip the Y/N confirmation before the links change (automation); default: ask
+    [switch]$NoConfirm
 )
 
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
@@ -37,6 +39,17 @@ try {
     $VE = [version]($Man.Enforce.Policies | Where-Object { $_.Type -eq 'Base' } | Select-Object -First 1).Version
     if ($Mode -eq 'Audit' -and $Before.Enforce) {
         Add-WdacResult $R 'WARN' 'Enforce -> Audit' "Devices that already run Enforce v$VE will NOT go back to Audit v$VA (the endpoint script never downgrades). NEXT, with the Audit link now enabled: build a new pair (1_GPO_build_packages.ps1) and publish it (2_GPO_create_gpos.ps1) - devices then move to the new Audit version, which is higher than v$VE."
+    }
+    $Now = if ($Before.Audit -and $Before.Enforce) { 'both links enabled' } elseif ($Before.Audit) { 'Audit' } elseif ($Before.Enforce) { 'Enforce' } else { 'None' }
+    if ($Now -ne $Mode) {
+        Confirm-WdacChange -NoConfirm:$NoConfirm -Action "switch $OU from mode '$Now' to mode '$Mode'" -Detail @(
+            $(switch ($Mode) {
+                'Audit' { "Audit link ENABLED (package v$VA), Enforce link disabled. Devices log what would be blocked (Event 3076); nothing is blocked." }
+                'Enforce' { "Enforce link ENABLED (package v$VE), Audit link disabled. Devices BLOCK every file the policy does not allow (Event 3077)." }
+                'None' { 'Both links disabled. Devices KEEP the policy they already run (6_GPO_rollback.ps1 removes it).' }
+            }),
+            'Devices in the OU pick it up at the next computer policy refresh, at boot, or with gpupdate /target:computer /force.'
+        )
     }
     $Want = @{ Audit = ($Mode -eq 'Audit'); Enforce = ($Mode -eq 'Enforce') }
     # Disable first, then enable, so both links are never enabled at the same time

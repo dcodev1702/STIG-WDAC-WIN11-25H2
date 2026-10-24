@@ -1,0 +1,20 @@
+{
+  "Mode": "Audit",
+  "BuiltAt": "2026-10-24T05:21:35.4200566+02:00",
+  "BuiltOn": "WIN11-PAW-WDAC",
+  "BuiltBy": "SKYNET\\Lorenzo",
+  "SourceXml": "C:\\WDAC\\Source\\Base-Enforce.xml",
+  "SourceXmlSha256": "18D7139EEB1D7CC38956F674B67154FE2B3B7A42AA07806AB74439E68832C3C0",
+  "DeployScriptSha256": "C03B17B109AAABF193CBAD55939B811937550E7F18712D7E8EF6273E53D9FF16",
+  "Policies": [
+    {
+      "Type": "Base",
+      "PolicyGuid": "{75AFC1CF-5372-491A-80CA-7BBB694F0A00}",
+      "Version": "2026.10.24.11",
+      "Name": "PAW-WDAC-GPO-Audit",
+      "File": "{75AFC1CF-5372-491A-80CA-7BBB694F0A00}.cip",
+      "Sha256": "AB19EF6DC8689C666D4340F4043E65BB17D6E1617FF2C6BED1DCC35D4A3FF482",
+      "Bytes": 330096
+    }
+  ]
+}

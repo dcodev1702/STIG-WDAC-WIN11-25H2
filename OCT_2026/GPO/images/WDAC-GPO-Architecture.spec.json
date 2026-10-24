@@ -1,0 +1,80 @@
+{
+  "width": 1600,
+  "title": "WDAC MULTI-POLICY GPO DEPLOYMENT",
+  "subtitle": ["APP CONTROL FOR BUSINESS", "AUDIT + ENFORCE GPOs", "ONE ENABLED LINK", "{GUID}.cip VIA CiTool", "NEVER DOWNGRADE"],
+  "description": "A reference device builds an Audit and an Enforce package from one enforced App Control policy and publishes them to two GPOs in SYSVOL. Both GPOs are linked to the target OU with exactly one link enabled. Windows 11 endpoints in the OU run Deploy-WDACPolicy.ps1 as SYSTEM from the startup script and a recurring scheduled task, verify the SHA-256 hash, and deploy the multiple-policy {GUID}.cip with CiTool only when the version is higher. Win32_DeviceGuard then reports the two DISA STIG values: V-243450 kernel mode and V-243451 user mode, where 0 is OFF, 1 is AUDIT and 2 is ENFORCING.",
+  "badge": { "text": "Windows 11 Enterprise 22H2+ · domain joined", "color": "green" },
+  "container": { "label": "Active Directory domain", "color": "green", "note": "the reference device builds · SYSVOL carries · endpoints deploy themselves as SYSTEM" },
+  "cards": [
+    {
+      "accent": "orange", "icon": "package", "title": "REFERENCE DEVICE", "subtitle": "build + publish · admin workstation",
+      "sections": [
+        { "label": "Role", "text": "Turns the finished enforced policy into an Audit + Enforce package pair and publishes both GPOs" },
+        { "label": "Source", "bullets": ["`C:\\WDAC\\Source\\Base-Enforce.xml`", "PolicyGuid.txt · one policy GUID for both packages", "Enforce-ready via config script 6 (or 6 -PrepareOnly)"] },
+        { "label": "Scripts · run order", "dot": "cyan", "bullets": ["0 pre-flight · rights, RSAT, next version pair", "1 build packages · Audit vN + Enforce vN+1", "2 create / update both GPOs (SYSVOL + AD)", "3 set mode · exactly ONE link enabled", "4 validate GPOs · 5 validate endpoint · 6 rollback", { "text": "2, 3 and 6 ask Y/N (yellow) · -NoConfirm for automation", "dot": "amber" }] },
+        { "label": "Output", "lines": ["`C:\\WDAC\\GPO\\Packages\\<stamp>\\Audit | Enforce`", "{GUID}.cip · manifest.json (SHA-256) · Deploy-WDACPolicy.ps1"] }
+      ],
+      "callout": { "kind": "Important", "title": "one XML, two modes", "text": "Both packages are compiled from the same enforced XML and differ only by option 3 (Enabled:Audit Mode). Step 1 proves it before compiling." },
+      "footer": "RSAT GROUP POLICY + AD · GPO CREATE + LINK RIGHTS"
+    },
+    {
+      "accent": "violet", "tint": true, "icon": "server", "title": "DOMAIN · SYSVOL", "subtitle": "two GPOs · one enabled link",
+      "sections": [
+        { "label": "Role", "text": "Carries both packages and decides which mode the OU receives" },
+        { "label": "Audit GPO", "dot": "amber", "bullets": ["JMSC-WDAC-PAWS - AppControl Audit", "{GUID}.cip vN · Enabled:Audit Mode ON", "GPP task WDAC-GPO-Deploy-Audit"] },
+        { "label": "Enforce GPO", "dot": "green", "bullets": ["JMSC-WDAC-PAWS - AppControl Enforce", "{GUID}.cip vN+1 · Audit Mode OFF", "GPP task WDAC-GPO-Deploy-Enforce"] },
+        { "label": "GPO settings", "dot": "violet", "bullets": ["Computer configuration only (user settings disabled)", "Waits for the network at startup (SyncForegroundPolicy = 1)"] },
+        { "label": "Inside each GPO", "lines": ["`Machine\\Scripts\\Startup\\WDAC\\`", "scripts.ini + task run Deploy-WDACPolicy.ps1 -Mode <Mode> -NoConfirm", "AD + GPT.INI versions in sync"] }
+      ],
+      "callout": { "kind": "Critical", "title": "not the built-in GP setting", "text": "'Deploy App Control for Business' only writes a single-policy SiPolicy.p7b. A multiple-policy {GUID}.cip needs CiTool, so each GPO runs a script." },
+      "footer": "BOTH LINKED TO THE TARGET OU · DISABLE BEFORE ENABLE"
+    },
+    {
+      "accent": "cyan", "icon": "windows", "title": "WINDOWS 11 ENDPOINTS", "subtitle": "in the target OU · run as SYSTEM",
+      "sections": [
+        { "label": "Role", "text": "Deploy the policy themselves, at every boot and on a schedule" },
+        { "label": "Triggers", "bullets": ["GPO startup script · every boot, before logon", "GPP task · at creation (+1 min), then every 4 h", "gpupdate /target:computer /force · run now"] },
+        { "label": "Deploy-WDACPolicy.ps1", "dot": "green", "bullets": ["Checks the SHA-256 in manifest.json first", "Deploys only a HIGHER version · CiTool --update-policy", "Never downgrades · never removes · no reboot", "Reads Win32_DeviceGuard · WARN 2004 if UMCI is not as expected", { "text": "Manual run asks Y/N before deploying; no console + no -NoConfirm = 3006", "dot": "amber" }] },
+        { "label": "Evidence", "lines": ["`C:\\Windows\\Logs\\WDAC-GPO\\Deploy-WDACPolicy.log`", "Application log WDAC-GPO 1000-3006 · state.json · Event 3099"] }
+      ],
+      "callout": { "kind": "Tip", "title": "confirm on the device", "text": "7_DISA_STIG_CHECK.ps1 prints each value as 0 OFF / 1 AUDIT / 2 ENFORCING and names the policy, version and GUID in effect." },
+      "footer": "WIN 11 ENTERPRISE 22H2+ · SERVERS AND DCs SKIPPED"
+    }
+  ],
+  "connectors": ["1 build · 2 publish", "3 set mode", "refresh · boot · task"],
+  "bar": {
+    "label": "Target OU", "color": "cyan",
+    "title": "TargetOU in GPO-Settings.psd1 · default: the reference device's OU",
+    "note": "Both GPOs linked · exactly one link enabled · computer policy refresh every 90-120 min, at boot, or gpupdate /force · security filtering: Authenticated Users",
+    "right": "3_GPO_set_mode.ps1 -Mode Audit | Enforce | None"
+  },
+  "corridor": {
+    "down": { "title": "Policy delivery", "sub": "SYSVOL → endpoint · verified before use", "color": "cyan", "chips": ["{GUID}.cip", "manifest.json", "SHA-256 match"] },
+    "center": { "title": "CiTool.exe", "sub": "--update-policy · in place" },
+    "up": { "title": "Proof + evidence", "sub": "what steps 5 and 7 read back", "color": "violet", "chips": ["Event 3099", "Win32_DeviceGuard", "state.json"] }
+  },
+  "panel": {
+    "label": "STIG outcome + operations", "color": "blue", "note": "what each mode produces · how to change it safely",
+    "banner": { "icon": "shield", "color": "violet", "title": "Microsoft Windows PAW STIG · App Control", "sub": "Win32_DeviceGuard  0 = OFF · 1 = AUDIT · 2 = ENFORCING · only 2 passes", "chips": ["Audit: 2 / 1", "Enforce: 2 / 2", "7_DISA_STIG_CHECK.ps1"] },
+    "columns": 3,
+    "cards": [
+      { "accent": "green", "icon": "shield", "title": "V-243450", "subtitle": "STIG ID WPAW-00-001050 · CAT II · kernel mode", "lines": ["CodeIntegrityPolicyEnforcementStatus = 2 (ENFORCING)", "Drivers and kernel code. Windows' own policies already enforce it.", "Reads 2 in Audit mode AND in Enforce mode"], "chips": ["Audit 2", "Enforce 2", "PASS"] },
+      { "accent": "cyan", "icon": "shield", "title": "V-243451", "subtitle": "STIG ID WPAW-00-001060 · CAT II · user mode (UMCI)", "lines": ["UsermodeCodeIntegrityPolicyEnforcementStatus", "Apps, DLLs, installers. Needs option 0 (UMCI) ON and option 3 (Audit Mode) OFF.", "Audit 1 (AUDIT) · Enforce 2 (ENFORCING)"], "chips": ["Audit 1 = open finding", "Enforce 2 = PASS"] },
+      { "accent": "orange", "icon": "version", "title": "Versions", "subtitle": "YYYY.MM.DD.N · local build date", "lines": ["Audit N · Enforce N+1 · same policy GUID", "N restarts at 1 each day; never below the highest known version", "Known = source XML · active policy · packages · both GPOs"], "chips": ["e.g. 2026.10.24.1", "2026.10.24.2"] },
+      { "accent": "violet", "icon": "toggle", "title": "Change mode", "subtitle": "3_GPO_set_mode.ps1", "lines": ["Audit → Enforce: switch the links only (Enforce is already higher)", "Enforce → Audit: switch FIRST, then 1 + 2 (a new, higher pair)", "Until then devices log 2001: newer version active, no downgrade"], "chips": ["no reboot", "no downgrade", "asks Y/N"] },
+      { "accent": "teal", "icon": "check", "title": "Validate", "subtitle": "4 GPOs · 5 endpoints · 7 STIG", "lines": ["4: AD/SYSVOL versions, hashes, CSEs, links, Audit < Enforce", "5: applied GPO, task, active version = package, 3099, STIG", "Results: PASS / WARN / FAIL to CSV + transcript in GPO\\Logs"], "chips": ["read-only", "exit 1 on FAIL"] },
+      { "accent": "rose", "icon": "undo", "title": "Roll back", "subtitle": "6_GPO_rollback.ps1", "lines": ["DisableLinks: OU → mode None; devices KEEP their policy", "RemovePolicy: CiTool --remove-policy (refused while a link is on)", "RemoveGpos: unlink and delete both GPOs"], "chips": ["asks Y/N", "-WhatIf", "-NoConfirm"] }
+    ]
+  },
+  "legend": [
+    { "label": "Reference device", "color": "orange" },
+    { "label": "Domain · SYSVOL · GPOs", "color": "violet" },
+    { "label": "Windows 11 endpoints", "color": "cyan" },
+    { "label": "Audit mode · warnings", "color": "amber", "shape": "dot" },
+    { "label": "Enforce mode · PASS", "color": "green", "shape": "dot" },
+    { "label": "Policy delivery (down)", "color": "cyan", "shape": "dot" },
+    { "label": "Proof + evidence (up)", "color": "violet", "shape": "dot" },
+    { "label": "Rollback", "color": "rose", "shape": "dot" }
+  ],
+  "footer": "C:\\WDAC\\GPO · app control for business · multiple-policy GPO deployment · 2026"
+}

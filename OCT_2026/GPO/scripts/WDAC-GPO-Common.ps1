@@ -2,6 +2,8 @@
 
 # Date-based policy versions (YYYY.MM.DD.N, never lower than any known version) - same file as in C:\WDAC\config\scripts
 . "$PSScriptRoot\WDAC-Version.ps1"
+# Yellow Y/N confirmation before App Control changes (-NoConfirm for automation) - same file as in C:\WDAC\config\scripts
+. "$PSScriptRoot\WDAC-Confirm.ps1"
 
 # Loads a Windows module in either edition (ConfigCI goes through the compatibility session in PowerShell 7)
 function Import-WdacModule([string]$Name) {
@@ -119,6 +121,10 @@ function Read-WdacManifest([string]$Folder) {
     if (-not (Test-Path -LiteralPath $File)) { return $null }
     return (Get-Content -LiteralPath $File -Raw | ConvertFrom-Json)
 }
+
+# Win32_DeviceGuard values as people read them: 0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes the STIG)
+function Format-WdacCiStatus([int]$Value) { "$Value ($(switch ($Value) { 0 { 'OFF' } 1 { 'AUDIT' } 2 { 'ENFORCING' } default { 'UNKNOWN' } }))" }
+function Format-WdacStig([int]$Kmci, [int]$Umci) { "V-243450 kernel $(Format-WdacCiStatus $Kmci) / V-243451 user $(Format-WdacCiStatus $Umci)" }
 
 # PASS / WARN / FAIL result tables
 function New-WdacResults { return , (New-Object System.Collections.Generic.List[object]) }

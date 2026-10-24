@@ -12,7 +12,9 @@ param(
     [string]$TargetOU,
     [string]$AuditGpoName,
     [string]$EnforceGpoName,
-    [int]$TaskIntervalHours
+    [int]$TaskIntervalHours,
+    # Skip the Y/N confirmation before the GPOs are created / updated (automation); default: ask
+    [switch]$NoConfirm
 )
 
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
@@ -37,6 +39,18 @@ try {
         $PackagePath = (Get-Content -LiteralPath $Latest -Raw).Trim()
     }
     Add-WdacResult $R 'OK' 'Inputs' "package $PackagePath | OU $OU | PDC $($Domain.PDC) | task every $($Cfg.TaskIntervalHours) h"
+
+    # Confirm before anything in the domain changes: the OU's enabled WDAC GPO delivers the new version to every device in it
+    $Plan = foreach ($Mode in 'Audit', 'Enforce') {
+        $M = Read-WdacManifest (Join-Path $PackagePath $Mode)
+        if (-not $M -or $M.Mode -ne $Mode) { throw "STOP: $(Join-Path $PackagePath $Mode) has no $Mode manifest.json. Run 1_GPO_build_packages.ps1." }
+        "$Mode v$(($M.Policies | Where-Object { $_.Type -eq 'Base' } | Select-Object -First 1).Version)"
+    }
+    $OnNow = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | Where-Object { $_.Enabled -and $_.DisplayName -in $Cfg.AuditGpoName, $Cfg.EnforceGpoName } | ForEach-Object { $_.DisplayName })
+    Confirm-WdacChange -NoConfirm:$NoConfirm -Action "publish $($Plan -join ' / ') to '$($Cfg.AuditGpoName)' and '$($Cfg.EnforceGpoName)'" -Detail @(
+        "Target OU: $OU (links that do not exist yet are created DISABLED)",
+        $(if ($OnNow) { "Enabled link now: $($OnNow -join ', '). Its devices apply the new version at the next policy refresh, at boot, or within $($Cfg.TaskIntervalHours) h." } else { 'No WDAC link is enabled: nothing reaches a device until 3_GPO_set_mode.ps1 enables one.' })
+    )
 
     $Versions = @{}
     foreach ($Mode in 'Audit', 'Enforce') {
@@ -70,7 +84,8 @@ try {
         New-Item -Path $Payload -ItemType Directory -Force | Out-Null
         Get-ChildItem -LiteralPath $Src -File | Copy-Item -Destination $Payload -Force
         $ScriptUnc = Join-Path (Join-Path $Paths.SysvolDomain $Paths.PayloadRel) 'Deploy-WDACPolicy.ps1'
-        $PsArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$ScriptUnc`" -Mode $Mode"
+        # -NoConfirm: SYSTEM has no console to answer the deployment script's Y/N prompt
+        $PsArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$ScriptUnc`" -Mode $Mode -NoConfirm"
 
         # ------------------------------------------------------------ startup script (scripts.ini is UTF-16 LE, as GPMC writes it)
         $Ini = Join-Path $Machine 'Scripts\scripts.ini'
