@@ -136,7 +136,7 @@ $SacText = switch ($Sac) { 0 { 'Off' } 1 { 'On' } 2 { 'Evaluation' } default { '
 $Policies = @((& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies | Where-Object { -not $_.IsSystemPolicy } | ForEach-Object {
     [pscustomobject]@{ FriendlyName = $_.FriendlyName; Type = $(if ($_.PolicyID -eq $_.BasePolicyID) { 'Base' } else { 'Supplemental' }); VersionString = $_.VersionString; PolicyID = $_.PolicyID; BasePolicyID = $_.BasePolicyID; IsEnforced = $_.IsEnforced; IsAuthorized = $_.IsAuthorized }
 })
-function StigText([int]$v) { switch ($v) { 0 { 'Not configured' } 1 { 'Audit mode' } 2 { 'Enforced' } default { "$v" } } }
+function StigText([int]$v) { switch ($v) { 0 { 'OFF' } 1 { 'AUDIT' } 2 { 'ENFORCING' } default { 'UNKNOWN' } } }
 
 # ---------------------------------------------------------------- STIG values recorded in transcripts
 $History = New-Object System.Collections.Generic.List[object]
@@ -146,16 +146,23 @@ foreach ($T in @(Get-ChildItem -Path 'C:\WDAC\Logs' -Filter '*.log' -File -Error
     for ($n = 0; $n -lt $Lines.Count; $n++) {
         if ($Lines[$n] -match '^Start time:\s*(\d{14})') { $Start = [datetime]::ParseExact($Matches[1], 'yyyyMMddHHmmss', $null).ToString('yyyy-MM-dd HH:mm:ss') }
         elseif ($Lines[$n] -match '^PS[^>]*>\s*(\S.*)$') { $Cmd = $Matches[1] }
+        elseif ($Lines[$n] -match '^\s+V-243450\s+WPAW-00-001050\s.*?\s(\d) \((?:OFF|AUDIT|ENFORCING|UNKNOWN)\)') {
+            # 7_DISA_STIG_CHECK.ps1 results table: one row per finding
+            $K = $Matches[1]
+            for ($m = $n + 1; $m -le [math]::Min($n + 3, $Lines.Count - 1); $m++) {
+                if ($Lines[$m] -match '^\s+V-243451\s+WPAW-00-001060\s.*?\s(\d) \((?:OFF|AUDIT|ENFORCING|UNKNOWN)\)') { $U = $Matches[1]; $History.Add([pscustomobject]@{ Seq = $History.Count; Transcript = $T.Name; TranscriptStart = $Start; Command = $Cmd; KMCI = "$K ($(StigText $K))"; UMCI = "$U ($(StigText $U))" }); break }
+            }
+        }
         elseif ($Lines[$n] -match '^CodeIntegrityPolicyEnforcementStatus\s*:\s*(\d)') {
             $K = $Matches[1]
             for ($m = $n + 1; $m -le [math]::Min($n + 3, $Lines.Count - 1); $m++) {
-                if ($Lines[$m] -match '^UsermodeCodeIntegrityPolicyEnforcementStatus\s*:\s*(\d)') { $History.Add([pscustomobject]@{ Seq = $History.Count; Transcript = $T.Name; TranscriptStart = $Start; Command = $Cmd; KMCI = $K; UMCI = $Matches[1] }); break }
+                if ($Lines[$m] -match '^UsermodeCodeIntegrityPolicyEnforcementStatus\s*:\s*(\d)') { $U = $Matches[1]; $History.Add([pscustomobject]@{ Seq = $History.Count; Transcript = $T.Name; TranscriptStart = $Start; Command = $Cmd; KMCI = "$K ($(StigText $K))"; UMCI = "$U ($(StigText $U))" }); break }
             }
         }
     }
 }
 # Order by transcript start, then by position inside the transcript; the live reading always comes last
-$History = @($History | Sort-Object TranscriptStart, Seq) + @([pscustomobject]@{ Transcript = '(live, report time)'; TranscriptStart = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); Command = 'Win32_DeviceGuard'; KMCI = "$Kmci"; UMCI = "$Umci" })
+$History = @($History | Sort-Object TranscriptStart, Seq) + @([pscustomobject]@{ Transcript = '(live, report time)'; TranscriptStart = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); Command = 'Win32_DeviceGuard'; KMCI = "$Kmci ($(StigText $Kmci))"; UMCI = "$Umci ($(StigText $Umci))" })
 
 # ---------------------------------------------------------------- policy XML stages + supplemental XMLs
 function Get-PolicySummary([string]$Path) {

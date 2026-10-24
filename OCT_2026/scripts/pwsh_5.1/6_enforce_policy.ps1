@@ -1,9 +1,16 @@
 #Requires -PSEdition Desktop
 # Windows PowerShell 5.1 edition - run in an elevated "Windows PowerShell" console or ISE (NOT pwsh 7).
 # Step 7: pre-deployment gate, stamp v3, compile, and apply the ENFORCED policy (Audit Mode is the only option turned off).
+# -PrepareOnly: prepare and check Base-Enforce.xml only - nothing is compiled into C:\WDAC\Compiled and nothing is deployed.
 param(
     # Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (empty = skip the check)
-    [string]$ExcludedAppPattern = ''
+    [string]$ExcludedAppPattern = '',
+    # Prepare and check C:\WDAC\Source\Base-Enforce.xml (Audit Mode OFF, options, name, next version, gate, compile TEST) but do
+    # NOT compile it into C:\WDAC\Compiled or deploy it. For the GPO guide, when this reference device stays in Audit and the
+    # GPOs deploy the policy (1_GPO_build_packages.ps1 reads Base-Enforce.xml).
+    [switch]$PrepareOnly,
+    # Skip the Y/N confirmation before the policy is deployed (automation such as MECM); default: ask
+    [switch]$NoConfirm
 )
 
 Import-Module ConfigCI -WarningAction SilentlyContinue -ErrorAction Stop
@@ -17,6 +24,13 @@ $LatestEnforceXml = Get-ChildItem -Path 'C:\WDAC\Source' -Filter 'Base-Enforce*.
 if (-not $LatestEnforceXml) { throw 'STOP: No Base-Enforce*.xml found in C:\WDAC\Source. Run 5_audit_merged_events.ps1 first (it prepares Base-Enforce.xml once the screening is clean), then open it in the Wizard (Step 6).' }
 $EnforceXml = 'C:\WDAC\Source\Base-Enforce.xml'
 if ($LatestEnforceXml.FullName -ne $EnforceXml) {
+    # Keep the reference this replaces as C:\WDAC\Compiled\PAW-WDAC-Enforced_v<its version>.xml (unless that copy exists)
+    if (Test-Path -LiteralPath $EnforceXml) {
+        $PrevDoc = New-Object System.Xml.XmlDocument
+        $PrevDoc.Load($EnforceXml)
+        $PrevCopy = "C:\WDAC\Compiled\PAW-WDAC-Enforced_v$($PrevDoc.SiPolicy.VersionEx).xml"
+        if (-not (Test-Path -LiteralPath $PrevCopy)) { Copy-Item -LiteralPath $EnforceXml -Destination $PrevCopy -ErrorAction Stop; Write-Host "Previous Base-Enforce.xml kept as $PrevCopy" -ForegroundColor Cyan }
+    }
     Copy-Item -LiteralPath $LatestEnforceXml.FullName -Destination $EnforceXml -Force -ErrorAction Stop
 }
 
@@ -39,7 +53,7 @@ foreach ($OptOff in @(3, 14, 15, 18, 19, 20)) {
 # 2. Stamp helpful PolicyName, PolicyId, and the next version - YYYY.MM.DD.N, higher than the screened audit policy and
 #    anything active (WDAC-Version.ps1) - DO NOT use -ResetPolicyID!
 . "$PSScriptRoot\WDAC-Version.ps1"
-$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $AuditXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $AuditXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced') + @(Get-WdacVersionsFromGpoPackages $PolicyGuid)
 $Next = Get-WdacNextVersion -Known $Known
 $Version = $Next.Versions[0]
 Write-Host "Policy version $Version ($($Next.Basis); highest known: $($Next.Highest))" -ForegroundColor Cyan
@@ -106,12 +120,34 @@ Write-Host 'PRE-DEPLOYMENT CHECK PASSED: Policy is Enforce-ready and Multi-Polic
 Write-Host 'Audit Mode is the ONLY option turned off. Options that stay ENABLED in the enforced policy:' -ForegroundColor Green
 $Opts | Sort-Object | ForEach-Object { Write-Host "  $_" }
 
-# 4. Compile Base-Enforce.xml to C:\WDAC\Compiled\{PolicyID}.cip and archive a copy
+if ($PrepareOnly) {
+    # Compile TEST in a temp folder only: proves the prepared reference compiles. Nothing goes to C:\WDAC\Compiled or to CiTool.
+    $TestDir = Join-Path ([IO.Path]::GetTempPath()) ('wdac_prepare_' + [guid]::NewGuid().ToString('N'))
+    New-Item -Path $TestDir -ItemType Directory -Force | Out-Null
+    try {
+        try { ConvertFrom-CIPolicy -XmlFilePath $EnforceXml -BinaryFilePath (Join-Path $TestDir 'test.cip') -ErrorAction Stop | Out-Null }
+        catch { throw "STOP: Compiling $EnforceXml failed: $($_.Exception.Message) Nothing was deployed." }
+        $TestBytes = (Get-Item -LiteralPath (Join-Path $TestDir 'test.cip')).Length
+    }
+    finally { Remove-Item -LiteralPath $TestDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "PREPARED (-PrepareOnly): $EnforceXml = $($Check.PolicyName) v$Version, Audit Mode OFF, compile test $TestBytes bytes. Nothing was compiled into C:\WDAC\Compiled or deployed; the active policy is unchanged." -ForegroundColor Green
+    Write-Host 'Next (GPO guide): 1_GPO_build_packages.ps1, 2_GPO_create_gpos.ps1, 4_GPO_validate_gpos.ps1.' -ForegroundColor Cyan
+    return
+}
+
+# 4. Confirm, then compile Base-Enforce.xml to C:\WDAC\Compiled\{PolicyID}.cip and archive a copy
+. "$PSScriptRoot\WDAC-Confirm.ps1"
+Confirm-WdacChange -NoConfirm:$NoConfirm -Action "ENFORCE $($Check.PolicyName) v$Version on $($env:COMPUTERNAME)" -Detail @(
+    "Policy $PolicyGuid replaces the audit policy now (CiTool --update-policy, no reboot).",
+    'From then on every file the policy does not allow is BLOCKED (Event 3077).',
+    'Answer Y only after the screening in Step 5 is clean and every required application has been tested.'
+)
 $CipFile = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
 try { ConvertFrom-CIPolicy -XmlFilePath $EnforceXml -BinaryFilePath $CipFile -ErrorAction Stop }
 catch { throw "STOP: Compiling $EnforceXml failed: $($_.Exception.Message) Run 3_1_validate_winevent_rules.ps1 on Events-Allow.xml, re-run script 4, then repeat Step 6. Nothing was deployed." }
 if (-not (Test-Path -LiteralPath $CipFile)) { throw "STOP: Compile did not produce $CipFile." }
 Copy-Item -LiteralPath $CipFile -Destination "C:\WDAC\Compiled\PAW-WDAC-Enforced_v$Version.cip" -Force -ErrorAction Stop
+Copy-Item -LiteralPath $EnforceXml -Destination "C:\WDAC\Compiled\PAW-WDAC-Enforced_v$Version.xml" -Force -ErrorAction Stop   # the exact XML behind that .cip
 
 # Record SHA256 hash of the enforced .cip binary for your audit evidence
 Get-FileHash -LiteralPath $CipFile -Algorithm SHA256 | Format-List

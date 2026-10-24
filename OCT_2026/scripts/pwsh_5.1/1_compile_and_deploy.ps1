@@ -1,5 +1,9 @@
 #Requires -PSEdition Desktop
 # Windows PowerShell 5.1 edition - run in an elevated "Windows PowerShell" console or ISE (NOT pwsh 7).
+param(
+    # Skip the Y/N confirmation before the policy is deployed (automation such as MECM); default: ask
+    [switch]$NoConfirm
+)
 
 Import-Module ConfigCI -WarningAction SilentlyContinue -ErrorAction Stop
 
@@ -11,7 +15,7 @@ if (-not (Test-Path -LiteralPath $BaseXml)) { throw "STOP: $BaseXml not found. C
 . "$PSScriptRoot\WDAC-Version.ps1"
 $PreDoc = New-Object System.Xml.XmlDocument
 $PreDoc.Load($BaseXml)
-$Known = @(Get-WdacActivePolicyVersion $PreDoc.SiPolicy.PolicyID) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Known = @(Get-WdacActivePolicyVersion $PreDoc.SiPolicy.PolicyID) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced') + @(Get-WdacVersionsFromGpoPackages $PreDoc.SiPolicy.PolicyID)
 $Next = Get-WdacNextVersion -Known $Known
 $Version = $Next.Versions[0]
 Write-Host "Policy version $Version ($($Next.Basis); highest known: $($Next.Highest))" -ForegroundColor Cyan
@@ -35,13 +39,19 @@ $PolicyGuid | Set-Content -LiteralPath 'C:\WDAC\Source\PolicyGuid.txt'
 } | Format-List
 
 
-# 3. Compile Base-Audit.xml to C:\WDAC\Compiled\{PolicyID}.cip
+# 3. Confirm, then compile Base-Audit.xml to C:\WDAC\Compiled\{PolicyID}.cip
+. "$PSScriptRoot\WDAC-Confirm.ps1"
+Confirm-WdacChange -NoConfirm:$NoConfirm -Action "deploy PAW-WDAC-Audit-Baseline v$Version in AUDIT mode on $($env:COMPUTERNAME)" -Detail @(
+    "Policy $PolicyGuid is applied now with CiTool --update-policy (no reboot); it replaces any active version of the same policy.",
+    'AUDIT mode blocks nothing: Event 3076 records each file the policy would block.'
+)
 $CipFile = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
 ConvertFrom-CIPolicy -XmlFilePath $BaseXml -BinaryFilePath $CipFile -ErrorAction Stop
 if (-not (Test-Path -LiteralPath $CipFile)) { throw "STOP: Compile did not produce $CipFile." }
 
 # Save an archive copy of this version for our audit trail
 Copy-Item -LiteralPath $CipFile -Destination "C:\WDAC\Compiled\PAW-WDAC-Audit-Baseline_v$Version.cip" -Force -ErrorAction Stop
+Copy-Item -LiteralPath $BaseXml -Destination "C:\WDAC\Compiled\PAW-WDAC-Audit-Baseline_v$Version.xml" -Force -ErrorAction Stop   # the exact XML behind that .cip
 
 # 4. Deploy the Baseline Audit Policy live with CiTool.exe (no reboot required)
 $CiOut = & "$env:SystemRoot\System32\CiTool.exe" --update-policy $CipFile -json

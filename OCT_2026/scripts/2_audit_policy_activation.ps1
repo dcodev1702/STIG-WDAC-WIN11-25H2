@@ -1,7 +1,10 @@
 # 1. Stage 1 STIG Check - Expect UMCI = 1 (Audit Mode). KMCI reads 1 on a clean OS, or stays 2 if Microsoft platform
 #    policies (e.g. the vulnerable driver blocklist) already enforced kernel mode at pre-flight.
+#    0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes); 7_DISA_STIG_CHECK.ps1 shows which policies produce the values.
+$CiMode = @{ 0 = 'OFF'; 1 = 'AUDIT'; 2 = 'ENFORCING' }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
-    Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus
+    Format-List @{ n = 'CodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243450' -f $_.CodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.CodeIntegrityPolicyEnforcementStatus] } },
+                @{ n = 'UsermodeCodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243451' -f $_.UsermodeCodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.UsermodeCodeIntegrityPolicyEnforcementStatus] } }
 
 # 2. Verify CiTool shows PAW-WDAC-Audit-Baseline loaded and authorized
 (& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies |

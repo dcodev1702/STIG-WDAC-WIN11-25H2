@@ -40,9 +40,16 @@ function Get-WdacVersionsFromManifests([string[]]$Folder, [string]$PolicyGuid) {
     foreach ($Root in $Folder) {
         if (-not $Root -or -not (Test-Path -LiteralPath $Root)) { continue }
         foreach ($M in @(Get-ChildItem -Path $Root -Filter 'manifest.json' -Recurse -File -ErrorAction SilentlyContinue)) {
-            try { foreach ($P in @((Get-Content -LiteralPath $M.FullName -Raw | ConvertFrom-Json).Policies | Where-Object { $_.PolicyGuid -ieq $PolicyGuid })) { [version]$P.Version } } catch { }
+            try { foreach ($P in @((Get-Content -LiteralPath $M.FullName -Raw | ConvertFrom-Json).Policies | Where-Object { "$($_.PolicyGuid)".Trim('{}') -ieq $PolicyGuid.Trim('{}') })) { [version]$P.Version } } catch { }
         }
     }
+}
+
+# Versions of the policy GUID in the GPO packages built on THIS device (C:\WDAC\GPO\Packages\<stamp>\Audit|Enforce\manifest.json).
+# The config scripts count them too: a version that a published Audit or Enforce package already uses must never be reused for
+# a different policy, or an endpoint holding that package would treat the new policy as "already active".
+function Get-WdacVersionsFromGpoPackages([string]$PolicyGuid, [string]$Root = 'C:\WDAC\GPO\Packages') {
+    if ($PolicyGuid -and (Test-Path -LiteralPath $Root)) { Get-WdacVersionsFromManifests -Folder $Root -PolicyGuid $PolicyGuid }
 }
 
 # Returns $Count consecutive versions starting at today's date + counter, always above every known version

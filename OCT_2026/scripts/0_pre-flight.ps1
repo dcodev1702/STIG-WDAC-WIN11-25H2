@@ -37,8 +37,11 @@ if (-not (Test-Path -LiteralPath "$env:SystemRoot\System32\CiTool.exe")) { throw
 #    A clean OS without App Control reports 0 / 0. Newer Windows 11 builds already load Microsoft platform policies
 #    (Smart App Control evaluation, vulnerable driver blocklist) and can report 2 / 1 before you start. Both are fine:
 #    the goal is 2 / 2 at the end, and every stage is recorded so the change is provable.
+#    0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes); 7_DISA_STIG_CHECK.ps1 shows which policies produce the values.
+$CiMode = @{ 0 = 'OFF'; 1 = 'AUDIT'; 2 = 'ENFORCING' }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
-    Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus
+    Format-List @{ n = 'CodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243450' -f $_.CodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.CodeIntegrityPolicyEnforcementStatus] } },
+                @{ n = 'UsermodeCodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243451' -f $_.UsermodeCodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.UsermodeCodeIntegrityPolicyEnforcementStatus] } }
 
 $SacState = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
 $SacText = switch ($SacState) { 0 { 'Off' } 1 { 'On' } 2 { 'Evaluation (audit-mode UMCI - can explain a starting UMCI value of 1)' } default { 'Not reported' } }

@@ -3,11 +3,14 @@
 # Run AFTER the App Control Policy Wizard created Events-Allow.xml (Step 4.2) and BEFORE the merge (script 4).
 # Sanitizes every rule so Merge-CIPolicy / ConvertFrom-CIPolicy (and therefore CiTool.exe) accept the file.
 # It only edits Events-Allow.xml after a successful compile + merge test; CiTool.exe is never called and no policy is applied.
+# It also removes unsigned file-name rules ("Allow <file> by file attributes"), which match in any folder (-KeepFileNameRules).
 param(
     [string]$EventsXml = 'C:\WDAC\Source\Events-Allow.xml',
     [string]$BaseXml = 'C:\WDAC\Source\Base-Audit.xml',
     [switch]$ReportOnly,
-    [switch]$AllowPublisherFallback
+    [switch]$AllowPublisherFallback,
+    # Keep unsigned file-name rules (FileName / InternalName / FileDescription / ProductName only) instead of removing them
+    [switch]$KeepFileNameRules
 )
 
 $ErrorActionPreference = 'Stop'
@@ -205,6 +208,23 @@ foreach ($R in @(Get-SiNode '//s:FileRules/*')) {
     if ($Problem) {
         Remove-SiNode $R
         Add-Finding 'REMOVED' (Get-Label $R) $Problem
+    }
+}
+
+# ---------------------------------------------------------------- 4b. unsigned file-name rules ("Allow <file> by file attributes")
+#     An Allow rule with only FileName / InternalName / FileDescription / ProductName - no signer, no path, no hash - matches a
+#     file with those names in ANY folder, and these version-resource values are easy to fake. Removed by default: cover the file
+#     with a FilePath / folder rule (script 4 -AdditionalFolderRules) or a Publisher rule. -KeepFileNameRules keeps them (WARN).
+#     Packaged-app rules (PackageFamilyName) and Deny rules are not affected.
+foreach ($R in @(Get-SiNode '//s:FileRules/s:Allow')) {
+    if ($R.HasAttribute('Hash') -or $R.HasAttribute('FilePath') -or $R.HasAttribute('PackageFamilyName')) { continue }
+    $Attrs = @(@('FileName', 'InternalName', 'FileDescription', 'ProductName') | Where-Object { $R.HasAttribute($_) } | ForEach-Object { "$_='$($R.GetAttribute($_))'" })
+    if ($Attrs.Count -eq 0) { continue }
+    $What = ($R.GetAttribute('FriendlyName') -replace ';\s*Correlation Id.*$', '')
+    if ($KeepFileNameRules) { Add-Finding 'WARN' (Get-Label $R) "unsigned file-name rule kept (-KeepFileNameRules): $What - $($Attrs -join ', ') matches in ANY folder and can be faked" }
+    else {
+        Remove-SiNode $R
+        Add-Finding 'REMOVED' (Get-Label $R) "unsigned file-name rule: $What - $($Attrs -join ', ') would allow a file with these names in ANY folder, and they can be faked. Cover it with a FilePath/folder rule (script 4 -AdditionalFolderRules) or a Publisher rule (-KeepFileNameRules keeps it)"
     }
 }
 

@@ -1,17 +1,23 @@
 #Requires -PSEdition Desktop
 # Windows PowerShell 5.1 edition - run in an elevated "Windows PowerShell" console or ISE (NOT pwsh 7).
 # ConfigCI is a native Windows PowerShell 5.1 module, so no compatibility session or nested powershell.exe is needed.
-# Step 5: merge Base-Audit.xml + Events-Allow.xml, keep Audit Mode, deploy, and start the screening window.
+# Step 5: merge the base policy (-BaseXml, default Base-Audit.xml) + Events-Allow.xml, keep Audit Mode, deploy, and start the
+# screening window.
 param(
+    # Base policy the event rules are merged INTO. Round 1 (default): the Wizard baseline Base-Audit.xml. A later round (adding
+    # applications to a policy that is already enforced or deployed by GPO): the current reference policy,
+    # C:\WDAC\Source\Base-Enforce.xml - it holds every rule added since the baseline. Audit Mode is switched back ON below.
+    [ValidateNotNullOrEmpty()][string]$BaseXml = 'C:\WDAC\Source\Base-Audit.xml',
     # Optional: admin-writable-only folders to allow with a FilePath rule, e.g. 'C:\Program Files\MyApp\*'.
     # A folder that does not exist on this machine is skipped with a warning; a folder standard users can write to is
     # skipped too (runtime FilePath rule protection would ignore the rule).
     [string[]]$AdditionalFolderRules = @(),
     # Optional: regex for an application that must NOT be allowed by this policy, e.g. 'MyBlockedApp' (empty = skip the check)
-    [string]$ExcludedAppPattern = ''
+    [string]$ExcludedAppPattern = '',
+    # Skip the Y/N confirmation before the policy is deployed (automation such as MECM); default: ask
+    [switch]$NoConfirm
 )
 
-$BaseXml        = 'C:\WDAC\Source\Base-Audit.xml'
 $EventsXml      = 'C:\WDAC\Source\Events-Allow.xml'
 $MergedXml      = 'C:\WDAC\Source\Base-Audit-Merged.xml'
 $PolicyGuidFile = 'C:\WDAC\Source\PolicyGuid.txt'
@@ -23,7 +29,15 @@ foreach ($RequiredFile in $BaseXml, $EventsXml, $PolicyGuidFile) {
 }
 $PolicyGuid = (Get-Content -LiteralPath $PolicyGuidFile -Raw).Trim()
 
-# 1. Merge Base-Audit.xml (FIRST!) and Events-Allow.xml (SECOND)
+# The base must be THIS policy (same GUID as PolicyGuid.txt, a base policy) and must not be this script's own output
+$BaseXml = (Resolve-Path -LiteralPath $BaseXml).Path
+if ($BaseXml -ieq $MergedXml) { throw "STOP: -BaseXml cannot be $MergedXml (this script overwrites it). Pass C:\WDAC\Source\Base-Enforce.xml, or a copy of the file." }
+$BaseDoc = New-Object System.Xml.XmlDocument
+try { $BaseDoc.Load($BaseXml) } catch { throw "STOP: $BaseXml is not a readable policy XML: $($_.Exception.Message)" }
+if ($BaseDoc.SiPolicy.PolicyID -ine $PolicyGuid -or $BaseDoc.SiPolicy.BasePolicyID -ine $PolicyGuid) { throw "STOP: $BaseXml is not base policy $PolicyGuid from PolicyGuid.txt (PolicyID $($BaseDoc.SiPolicy.PolicyID), BasePolicyID $($BaseDoc.SiPolicy.BasePolicyID))." }
+Write-Host ("Merging into base: {0} ({1} v{2}, Audit Mode {3})" -f $BaseXml, ($BaseDoc.SiPolicy.Settings.Setting | Where-Object { $_.ValueName -eq 'Name' }).Value.String, $BaseDoc.SiPolicy.VersionEx, $(if (@($BaseDoc.SiPolicy.Rules.Rule.Option) -contains 'Enabled:Audit Mode') { 'ON' } else { 'OFF - switched back ON below' })) -ForegroundColor Cyan
+
+# 1. Merge the base ($BaseXml, FIRST!) and Events-Allow.xml (SECOND)
 try { Merge-CIPolicy -PolicyPaths $BaseXml, $EventsXml -OutputFilePath $MergedXml -ErrorAction Stop | Out-Null }
 catch { throw "STOP: Merge-CIPolicy failed: $($_.Exception.Message) Run 3_1_validate_winevent_rules.ps1 on Events-Allow.xml (Step 4.3), then re-run this script." }
 
@@ -73,10 +87,10 @@ foreach ($OptOff in @(14, 15, 18, 19, 20)) {
     Set-RuleOption -FilePath $MergedXml -Option $OptOff -Delete -ErrorAction Stop
 }
 
-# 4. Stamp helpful PolicyName, PolicyId, and the next version - YYYY.MM.DD.N, higher than the baseline and anything active
-#    (WDAC-Version.ps1) - DO NOT use -ResetPolicyID!
+# 4. Stamp helpful PolicyName, PolicyId, and the next version - YYYY.MM.DD.N, higher than the base, anything active, earlier
+#    archives and this device's GPO packages (WDAC-Version.ps1) - DO NOT use -ResetPolicyID!
 . "$PSScriptRoot\WDAC-Version.ps1"
-$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $BaseXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced')
+$Known = @(Get-WdacActivePolicyVersion $PolicyGuid) + @(Get-WdacVersionsFromXml $BaseXml) + @(Get-WdacVersionsFromArchive -Name 'PAW-WDAC-Audit-Baseline', 'PAW-WDAC-Audit-Merged', 'PAW-WDAC-Enforced') + @(Get-WdacVersionsFromGpoPackages $PolicyGuid)
 $Next = Get-WdacNextVersion -Known $Known
 $Version = $Next.Versions[0]
 Write-Host "Policy version $Version ($($Next.Basis); highest known: $($Next.Highest))" -ForegroundColor Cyan
@@ -126,12 +140,18 @@ if (-not ($Check.MatchesBaseline -and $Check.AuditModeOn -and $Check.Supplementa
 }
 
 
-# 6. Compile Base-Audit-Merged.xml to C:\WDAC\Compiled\{PolicyID}.cip and archive a copy
+# 6. Confirm, then compile Base-Audit-Merged.xml to C:\WDAC\Compiled\{PolicyID}.cip and archive a copy
+. "$PSScriptRoot\WDAC-Confirm.ps1"
+Confirm-WdacChange -NoConfirm:$NoConfirm -Action "deploy $($Check.PolicyName) v$Version in AUDIT mode on $($env:COMPUTERNAME)" -Detail @(
+    "Policy $PolicyGuid replaces the active audit policy now (CiTool --update-policy, no reboot).",
+    'AUDIT mode blocks nothing: Event 3076 records each file the merged rules still miss.'
+)
 $CipFile = Join-Path 'C:\WDAC\Compiled' "$PolicyGuid.cip"
 try { ConvertFrom-CIPolicy -XmlFilePath $MergedXml -BinaryFilePath $CipFile -ErrorAction Stop }
 catch { throw "STOP: Compiling $MergedXml failed: $($_.Exception.Message) Run 3_1_validate_winevent_rules.ps1 on Events-Allow.xml (Step 4.3), then re-run this script. Nothing was deployed." }
 if (-not (Test-Path -LiteralPath $CipFile)) { throw "STOP: Compile did not produce $CipFile." }
 Copy-Item -LiteralPath $CipFile -Destination "C:\WDAC\Compiled\PAW-WDAC-Audit-Merged_v$Version.cip" -Force -ErrorAction Stop
+Copy-Item -LiteralPath $MergedXml -Destination "C:\WDAC\Compiled\PAW-WDAC-Audit-Merged_v$Version.xml" -Force -ErrorAction Stop   # the exact XML behind that .cip
 
 # 7. Apply the updated Merged Audit Policy live with CiTool.exe
 $CiOut = & "$env:SystemRoot\System32\CiTool.exe" --update-policy $CipFile -json
@@ -146,8 +166,11 @@ $ScreenStart = Get-Date
 $ScreenStart.ToString('o') | Set-Content -LiteralPath $ScreenStartFile -ErrorAction Stop
 
 # 9. Confirm STIG status is still 1 / 1 (Audit Mode) and FriendlyName updated to PAW-WDAC-Audit-Merged
+#    0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes); 7_DISA_STIG_CHECK.ps1 shows which policies produce the values.
+$CiMode = @{ 0 = 'OFF'; 1 = 'AUDIT'; 2 = 'ENFORCING' }
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
-    Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus
+    Format-List @{ n = 'CodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243450' -f $_.CodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.CodeIntegrityPolicyEnforcementStatus] } },
+                @{ n = 'UsermodeCodeIntegrityPolicyEnforcementStatus'; e = { '{0} ({1}) - V-243451' -f $_.UsermodeCodeIntegrityPolicyEnforcementStatus, $CiMode[[int]$_.UsermodeCodeIntegrityPolicyEnforcementStatus] } }
 
 (& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies |
     Where-Object { -not $_.IsSystemPolicy } |
