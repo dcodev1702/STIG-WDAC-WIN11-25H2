@@ -1,0 +1,33 @@
+**********************
+PowerShell transcript start
+Start time: 20261024015258
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File C:\WDAC\GPO\scripts\3_GPO_set_mode.ps1 -Mode Enforce
+Process ID: 8860
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+WARNING: this changes App Control - switch OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local from mode 'Audit' to mode 'Enforce'
+  Enforce link ENABLED (package v2026.10.24.2), Audit link disabled. Devices BLOCK every file the policy does not allow (Event 3077).
+  Devices in the OU pick it up at the next computer policy refresh, at boot, or with gpupdate /target:computer /force.
+PS>TerminatingError(): "STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation."
+
+Status Check    Detail
+------ -----    ------
+FAIL   Set mode STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation.
+Set mode Enforce: FAILED - 1 fail, 0 warning(s). Results: C:\WDAC\GPO\Logs\3_GPO_set_mode-20261024-015258.csv
+**********************
+PowerShell transcript end
+End time: 20261024015259
+**********************

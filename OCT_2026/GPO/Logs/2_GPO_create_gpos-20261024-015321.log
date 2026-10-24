@@ -1,0 +1,34 @@
+**********************
+PowerShell transcript start
+Start time: 20261024015321
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File C:\WDAC\GPO\scripts\2_GPO_create_gpos.ps1
+Process ID: 6600
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+WARNING: this changes App Control - publish Audit v2026.10.24.1 / Enforce v2026.10.24.2 to 'JMSC-WDAC-PAWS - AppControl Audit' and 'JMSC-WDAC-PAWS - AppControl Enforce'
+  Target OU: OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local (links that do not exist yet are created DISABLED)
+  Enabled link now: JMSC-WDAC-PAWS - AppControl Audit. Its devices apply the new version at the next policy refresh, at boot, or within 4 h.
+PS>TerminatingError(): "STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation."
+
+Status Check           Detail
+------ -----           ------
+OK     Inputs          package C:\WDAC\GPO\Packages\20261024-012715 | OU OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local | PDC DC25-1.skynet-home.local | task every 4 h
+FAIL   Create / update STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation.
+GPO create / update: FAILED - 1 fail, 0 warning(s). Results: C:\WDAC\GPO\Logs\2_GPO_create_gpos-20261024-015321.csv
+**********************
+PowerShell transcript end
+End time: 20261024015322
+**********************

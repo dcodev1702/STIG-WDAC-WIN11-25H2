@@ -1,0 +1,31 @@
+**********************
+PowerShell transcript start
+Start time: 20261024015255
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File C:\WDAC\GPO\scripts\3_GPO_set_mode.ps1 -Mode Audit
+Process ID: 5816
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Next: on an endpoint wait for the next refresh (or gpupdate /target:computer /force), give the task ~2 minutes, then .\5_GPO_validate_endpoint.ps1 -ExpectedMode Audit
+
+Status Check        Detail
+------ -----        ------
+OK     Audit link   JMSC-WDAC-PAWS - AppControl Audit: enabled=True (was True) - package v2026.10.24.1
+OK     Enforce link JMSC-WDAC-PAWS - AppControl Enforce: enabled=False (was False) - package v2026.10.24.2
+OK     Mode         OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local is now in mode 'Audit'
+Set mode Audit: PASSED. Results: C:\WDAC\GPO\Logs\3_GPO_set_mode-20261024-015255.csv
+**********************
+PowerShell transcript end
+End time: 20261024015257
+**********************

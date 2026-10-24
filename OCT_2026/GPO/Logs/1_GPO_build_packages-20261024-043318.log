@@ -1,0 +1,44 @@
+**********************
+PowerShell transcript start
+Start time: 20261024043318
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File C:\WDAC\GPO\scripts\1_GPO_build_packages.ps1
+Process ID: 11576
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+Status Check                             Detail
+------ -----                             ------
+OK     Version plan                      next pair 2026.10.24.7 / 2026.10.24.8 - today 2026-10-24, next counter after v2026.10.24.6; highest known v2026.10.24.6 (source XML, this device's active policy, earlier packages, 2
+                                         published GPO payload(s))
+OK     Audit GUID                        {75AFC1CF-5372-491A-80CA-7BBB694F0A00} / base {75AFC1CF-5372-491A-80CA-7BBB694F0A00} / Base Policy / v2026.10.24.7
+OK     Enforce GUID                      {75AFC1CF-5372-491A-80CA-7BBB694F0A00} / base {75AFC1CF-5372-491A-80CA-7BBB694F0A00} / Base Policy / v2026.10.24.8
+OK     Options differ only by Audit Mode only in Audit: Enabled:Audit Mode; only in Enforce: (none)
+OK     Enforce options                   Disabled:Script Enforcement, Enabled:Advanced Boot Options Menu, Enabled:Allow Supplemental Policies, Enabled:Boot Audit On Failure, Enabled:Inherit Default Policy, Enabled:Managed
+                                         Installer, Enabled:UMCI, Enabled:Unsigned System Integrity Policy, Enabled:Update Policy No Reboot, Required:WHQL
+OK     Identical <EKUs>                  1 child node(s)
+OK     Identical <FileRules>             2607 child node(s)
+OK     Identical <Signers>               228 child node(s)
+OK     Identical <SigningScenarios>      2 child node(s)
+OK     Identical <UpdatePolicySigners>   0 child node(s)
+OK     Identical <CiSigners>             10 child node(s)
+OK     Rule counts                       signers 228, allow 76, deny 2357, fileattrib 174
+OK     Audit package                     Base PAW-WDAC-GPO-Audit v2026.10.24.7 - {75AFC1CF-5372-491A-80CA-7BBB694F0A00}.cip 332300 bytes SHA-256 613475940CD39C98F582529FB476927B1E235BAE9D390789889966E47FA5549C
+OK     Enforce package                   Base PAW-WDAC-GPO-Enforce v2026.10.24.8 - {75AFC1CF-5372-491A-80CA-7BBB694F0A00}.cip 332308 bytes SHA-256 22F9FDC69015E656BF1B134D3E462C074E6AF3A38ECE5D0D7F2905B7565B22BD
+OK     Package folder                    C:\WDAC\GPO\Packages\20261024-043318 (recorded in C:\WDAC\GPO\Packages\latest.txt)
+Package build: PASSED. Results: C:\WDAC\GPO\Logs\1_GPO_build_packages-20261024-043318.csv
+**********************
+PowerShell transcript end
+End time: 20261024043341
+**********************

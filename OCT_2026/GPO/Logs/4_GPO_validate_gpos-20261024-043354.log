@@ -1,0 +1,54 @@
+**********************
+PowerShell transcript start
+Start time: 20261024043354
+Username: SKYNET\Lorenzo
+RunAs User: SKYNET\Lorenzo
+Configuration Name: 
+Machine: WIN11-PAW-WDAC (Microsoft Windows NT 10.0.28000.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File C:\WDAC\GPO\scripts\4_GPO_validate_gpos.ps1
+Process ID: 8296
+PSVersion: 7.6.8
+PSEdition: Core
+GitCommitId: 7.6.8
+OS: Microsoft Windows 10.0.28000
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+Status Check                                       Detail
+------ -----                                       ------
+OK     Audit GPO                                   'JMSC-WDAC-PAWS - AppControl Audit' {85b428c6-dd0f-4a6a-b672-ac7f70716a6c} - modified 10/24/2026 04:33:52
+OK     Audit status                                UserSettingsDisabled
+OK     Audit version AD/SYSVOL                     8 / 8
+OK     Audit CSEs                                  GPP core, Registry, Scripts, GPP Scheduled Tasks registered
+OK     Audit security filtering                    GpoApply: Authenticated Users
+OK     Audit wait for network                      SyncForegroundPolicy = 1
+OK     Audit manifest                              Mode Audit, built 10/24/2026 04:33:39 on WIN11-PAW-WDAC from C:\WDAC\Source\Base-Enforce.xml
+OK     Audit payload on DC25-1.skynet-home.local   1 policy file(s) + deploy script, hashes match: Base v2026.10.24.7
+OK     Audit startup script                        0Parameters=-NoProfile -NonInteractive -ExecutionPolicy Bypass -File
+                                                   "\\skynet-home.local\SysVol\skynet-home.local\Policies\{85B428C6-DD0F-4A6A-B672-AC7F70716A6C}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode Audit -NoConfirm
+OK     Audit scheduled task                        WDAC-GPO-Deploy-Audit runAs NT AUTHORITY\System, every PT4H + at creation, removePolicy=1
+OK     Audit link                                  linked to OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local, enabled=True, enforced=False, order 1
+OK     Enforce GPO                                 'JMSC-WDAC-PAWS - AppControl Enforce' {432b37d5-1a72-4372-b157-5cbad32eb908} - modified 10/24/2026 04:33:52
+OK     Enforce status                              UserSettingsDisabled
+OK     Enforce version AD/SYSVOL                   8 / 8
+OK     Enforce CSEs                                GPP core, Registry, Scripts, GPP Scheduled Tasks registered
+OK     Enforce security filtering                  GpoApply: Authenticated Users
+OK     Enforce wait for network                    SyncForegroundPolicy = 1
+OK     Enforce manifest                            Mode Enforce, built 10/24/2026 04:33:41 on WIN11-PAW-WDAC from C:\WDAC\Source\Base-Enforce.xml
+OK     Enforce payload on DC25-1.skynet-home.local 1 policy file(s) + deploy script, hashes match: Base v2026.10.24.8
+OK     Enforce startup script                      0Parameters=-NoProfile -NonInteractive -ExecutionPolicy Bypass -File
+                                                   "\\skynet-home.local\SysVol\skynet-home.local\Policies\{432B37D5-1A72-4372-B157-5CBAD32EB908}\Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1" -Mode Enforce -NoConfirm
+OK     Enforce scheduled task                      WDAC-GPO-Deploy-Enforce runAs NT AUTHORITY\System, every PT4H + at creation, removePolicy=1
+OK     Enforce link                                linked to OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local, enabled=False, enforced=False, order 2
+OK     Same policy GUID                            {75AFC1CF-5372-491A-80CA-7BBB694F0A00} / {75AFC1CF-5372-491A-80CA-7BBB694F0A00}
+OK     Version order                               Audit v2026.10.24.7 < Enforce v2026.10.24.8
+OK     Active mode for the OU                      Audit
+GPO validation: PASSED. Results: C:\WDAC\GPO\Logs\4_GPO_validate_gpos-20261024-043354.csv
+**********************
+PowerShell transcript end
+End time: 20261024043356
+**********************
