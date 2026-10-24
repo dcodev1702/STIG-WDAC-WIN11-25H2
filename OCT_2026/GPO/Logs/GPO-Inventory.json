@@ -3,12 +3,12 @@
     "Name": "JMSC-WDAC-PAWS - AppControl Audit",
     "Id": "{85b428c6-dd0f-4a6a-b672-ac7f70716a6c}",
     "Sysvol": "\\\\skynet-home.local\\SysVol\\skynet-home.local\\Policies\\{85B428C6-DD0F-4A6A-B672-AC7F70716A6C}",
-    "Package": "C:\\WDAC\\GPO\\Packages\\20261023-185944"
+    "Package": "C:\\WDAC\\GPO\\Packages\\20261024-052113"
   },
   {
     "Name": "JMSC-WDAC-PAWS - AppControl Enforce",
     "Id": "{432b37d5-1a72-4372-b157-5cbad32eb908}",
     "Sysvol": "\\\\skynet-home.local\\SysVol\\skynet-home.local\\Policies\\{432B37D5-1A72-4372-B157-5CBAD32EB908}",
-    "Package": "C:\\WDAC\\GPO\\Packages\\20261023-185944"
+    "Package": "C:\\WDAC\\GPO\\Packages\\20261024-052113"
   }
 ]

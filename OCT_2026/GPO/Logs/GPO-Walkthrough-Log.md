@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Effort** | Deploy the App Control multiple-policy-format base policy through **two GPOs** (Audit / Enforce) linked to the device's OU. A separate effort from `C:\WDAC\config\README.md`, which was **not modified**. |
-| **Guide** | `C:\WDAC\GPO\GPO-README.md` · scripts `C:\WDAC\GPO\scripts\` · logs `C:\WDAC\GPO\Logs\` · packages `C:\WDAC\GPO\Packages\` |
+| **Guide** | `C:\WDAC\GPO\README.md` (named `GPO-README.md` until 2026-10-24) · diagram `C:\WDAC\GPO\images\` · scripts `C:\WDAC\GPO\scripts\` · logs `C:\WDAC\GPO\Logs\` · packages `C:\WDAC\GPO\Packages\` |
 | **Operator** | Claude Code (agent) on `WIN11-PAW-WDAC` as `skynet\lorenzo` (Domain Admin), with user decisions recorded below |
 | **Started** | 2026-10-23 18:17 (+02:00) |
 
@@ -127,7 +127,7 @@
 - Current state: OU `JMSC-WDAC-WRKSTNS` in **Enforce** mode (Enforce link enabled, Audit link disabled).
 
 ## Deliverables — 2026-10-23 19:24
-- `C:\WDAC\GPO\GPO-README.md`: step-by-step guide with validations (441 lines; 16/16 in-page links resolve; every referenced script exists; no machine-specific content).
+- `C:\WDAC\GPO\GPO-README.md` (renamed `README.md` by the user on 2026-10-24): step-by-step guide with validations (441 lines; 16/16 in-page links resolve; every referenced script exists; no machine-specific content).
 - `C:\WDAC\GPO\scripts\`: `GPO-Settings.psd1`, `WDAC-GPO-Common.ps1`, `0_`–`6_` scripts, endpoint `Deploy-WDACPolicy.ps1`. All run in PowerShell 7 and Windows PowerShell 5.1 (0 parse errors in both, ASCII-only).
 - `C:\WDAC\GPO\Packages\20261023-185944\`: the deployed Audit v.4 / Enforce v.5 packages.
 - `C:\WDAC\GPO\Logs\`: this log, every script transcript and PASS/FAIL CSV, `GPO-Inventory.json`, 3077 evidence, `GPO-Deployment-Report.html`.
@@ -153,3 +153,110 @@
   - Config selection lines with real data → `2026.10.23.1`; a same-day chain gives `.1 → .2 → .3`. (Config scripts 1/4/6 themselves were not run, because they deploy.)
   - 40 script files: 0 parse errors (PS7 + 5.1), ASCII-only.
 - `C:\WDAC\results\config-upload-manifest-SHA256.csv` regenerated (31 files) because config changed.
+
+### Operation — OU Enforce → **Audit** via GPO (README §10.2, as written) — ✅ 2026-10-24 01:27 – 01:28
+- **User request:** *"put the system back in Audit mode and install all the tools you need … You'll have to go to Audit mode via GPO first."*
+- `3_GPO_set_mode.ps1 -Mode Audit` (01:27:06) → PASSED with the expected WARN (*"Devices that already run Enforce v2026.10.21.5 will NOT go back to Audit v2026.10.21.4 … build a new pair"*); Audit link enabled, Enforce link disabled.
+- `1_GPO_build_packages.ps1` (01:27:15) → PASSED: pair **`2026.10.24.1` / `2026.10.24.2`** (today, counter 1; highest known v2026.10.21.5 incl. 2 published payloads); gate identical to the first build (options differ only by Audit Mode; 2,538 FileRules / 224 Signers identical). Package `Packages\20261024-012715`; Audit `.cip` SHA-256 `CAC570F1…84D0`, Enforce `87BA852A…923E`.
+- `2_GPO_create_gpos.ps1` (01:27:53) → PASSED (both GPOs updated in place, links left as they were); `4_GPO_validate_gpos.ps1` (01:27:56) → PASSED, no FAIL or WARN rows, **active mode for the OU: Audit**, Audit v.24.1 < Enforce v.24.2.
+- `gpupdate /target:computer /force`, then `Start-ScheduledTask WDAC-GPO-Deploy-Audit` (01:28:22, result 0). Deploy log 01:28:27: *"PAW-WDAC-GPO-Audit {75afc1cf…}: deployed v2026.10.24.1 (Audit), was v2026.10.21.5 … IsAuthorized True … run as NT AUTHORITY\SYSTEM"* · *"KMCI/UMCI = 2 / 1"*. In place, no reboot.
+- `5_GPO_validate_endpoint.ps1` (01:28:37) → **PASSED**: applied GPOs = Audit + Default Domain Policy; active `PAW-WDAC-GPO-Audit` v2026.10.24.1 = package; 3099 *"id GPO-AUDIT-2026.10.24.1. Status 0x0"*; **STIG 2 / 1**; supplemental authorized.
+
+### Tooling installed while in Audit (user request) — 2026-10-24 01:29 – 01:35
+| Tool | How | Result |
+|---|---|---|
+| Git | `winget install --id Git.Git -e --scope machine --silent` | 2.55.0.5, installer hash verified by winget |
+| GitHub CLI | `winget install --id GitHub.cli -e --scope machine --silent` | 2.103.1, installer hash verified |
+| GitHub login | `gh auth login --web --git-protocol https` (device code entered by the user) | account `dcodev1702`, token in the Windows keyring, scopes gist / read:org / repo |
+| Az PowerShell (PS7) | `Install-PSResource -Name Az -Scope AllUsers -TrustRepository` (PSGallery) | Az 16.4.0 + 102 `Az.*` modules in `C:\Program Files\PowerShell\Modules`; `Import-Module Az.Accounts` OK in a fresh pwsh |
+- These ran under the **Audit** policy, so their files are logged as 3076, not blocked. **Under Enforce they will be blocked** unless the reference policy allows them (rebuild → new pair). Pending user decision.
+- The private reference repo `dcodev1702/USAREUR-AF-CYBER-RANGE` was cloned read-only into the agent's scratch folder (nothing from it was executed) to match its diagram style.
+
+### Change — STIG values shown with their meaning — ✅ 2026-10-24 01:20 – 01:45
+- **User request:** show `0` / `1` / `2` as **OFF / AUDIT / ENFORCING** next to the STIG IDs, and have the STIG check name the policy, version and other details so the result can be explained.
+- GPO scripts: `WDAC-GPO-Common.ps1` gained `Format-WdacCiStatus` / `Format-WdacStig` (e.g. *"V-243450 kernel 2 (ENFORCING) / V-243451 user 1 (AUDIT)"*), used by `0_GPO_pre-flight.ps1`, `5_GPO_validate_endpoint.ps1` (*"user mode 1 (AUDIT) expected in Audit mode: V-243451 stays open until Enforce"*) and `6_GPO_rollback.ps1`. `Deploy-WDACPolicy.ps1` logs *"Win32_DeviceGuard V-243450 kernel = 2 (ENFORCING), V-243451 user = 1 (AUDIT) (expected user 1 (AUDIT) for Audit)"* (verified in a manual run). The published GPOs still carry the earlier endpoint script until the next package is published.
+- Config: see the entry of the same time in `C:\WDAC\results\WDAC-STIG-Walkthrough-Log.md` (script 7 rewrite, stage checks 0/2/4, run report).
+
+### Change — Architecture diagram (README §1.1) — ✅ 2026-10-24 01:40 – 01:50
+- The ASCII block in §1.1 is replaced by `images\WDAC-GPO-Architecture.png` (3200 × 3616, rendered at 2x) with descriptive alt text and a link to the source `images\WDAC-GPO-Architecture.svg` (1600 × 1808). `images\WDAC-GPO-Architecture.spec.json` is the layout source the SVG was generated from.
+- Style taken from the user's reference repo (`RANGE-INFRA\usareur-af-cyber-range.svg`): dark neon palette, cards with glowing top bars, uppercase section labels with coloured bullets, callouts, footer pills, dashed connectors into a bar, a two-lane corridor, a panel with banner and sub-cards, legend.
+- Content: reference device / domain + SYSVOL (two GPOs) / Windows 11 endpoints; target-OU bar; policy-delivery and proof lanes; STIG outcome (V-243450, V-243451 with 0/1/2 meanings), versions, mode change order, validation, rollback. Every claim checked against the scripts (e.g. `-WhatIf` via `SupportsShouldProcess`, `exit 1` on FAIL, Event 2001/2004). Layout checker: no text overflow; PNG reviewed visually.
+
+### Change — Y/N confirmation before App Control changes (`-NoConfirm`) — ✅ 2026-10-24 01:45 – 02:00
+- **User request:** scripts that apply policy or change WDAC must warn in yellow and ask Y/N, with a `-NoConfirm` switch for automation (e.g. GPO), in config and GPO scripts, and the documentation must say what the user has to do and why.
+- **Helper `WDAC-Confirm.ps1`** (`Confirm-WdacChange`, `Test-WdacInteractive`), identical (hash `4CF7BAF9…7F2B`) in `config\scripts`, `config\scripts\pwsh_5.1`, `GPO\scripts`. Yellow summary → `Continue? [Y/N]`; Y/Yes continues; N/No stops; 3 invalid answers stop; `-NoConfirm` continues without asking; a non-interactive session (not `UserInteractive`, started with `-NonInteractive`, or stdin redirected) without `-NoConfirm` **stops before any change** instead of waiting.
+- **Gated:** config 1 / 4 / 6 (both editions: after the checks, before compile/archive/deploy); GPO 2 (after the manifests are validated, before any GPO change; shows the pair and the enabled link), 3 (only when the mode actually changes; shows before → after), 6 (one prompt per action, then `$ConfirmPreference = 'None'` so `ShouldProcess` only serves `-WhatIf`; the RemovePolicy link guard now runs before the prompt). `Deploy-WDACPolicy.ps1` asks only when it is about to deploy; it logs **2005** (not confirmed) or **3006** (non-interactive without `-NoConfirm`) and deploys nothing. `2_GPO_create_gpos.ps1` now writes `-NoConfirm` into `scripts.ini` and the GPP task; `4_GPO_validate_gpos.ps1` fails a GPO without it. Not gated (read-only or local files only): config 0, 0_1, 2, 3, 3_1, 5, 7, 8; GPO 0, 1, 4, 5.
+- **Tests (2026-10-24 01:50 – 01:54):**
+  - Unit, PS7 and 5.1 identical: non-interactive → STOP; `-NoConfirm` → continue; `y` → continue; `N` → STOP; `maybe` then `Yes` → continue; 3 invalid → STOP.
+  - Integration (non-interactive shell, so the gates must stop): `3 -Mode Audit` (no change, no prompt) PASSED; `3 -Mode Enforce`, `2`, `6 -Action DisableLinks` → yellow summary + **STOP, nothing changed**. A before/after snapshot of both links, GPO modification times and versions was **identical**. `6 -Action DisableLinks -WhatIf` → *What if* only.
+  - Script 2 first showed `v?` when the package path was wrong (test-harness argument). Fixed so it validates both manifests **before** the prompt; re-run shows `Audit v2026.10.24.1 / Enforce v2026.10.24.2` and stops.
+  - Endpoint: `Deploy-WDACPolicy.ps1` (new) against a scratch copy of the Audit package whose manifest claimed v2026.10.24.9 → yellow warning, **ERROR 3006, not deployed**, active policy still v2026.10.24.1. State restored by running the GPO task (01:53:47, `NoChange`).
+  - 43 script files: 0 parse errors in PS7 and 5.1, ASCII-only.
+- **Docs:** GPO README IMPORTANT block in §4 (what each step shows, Y/N, `-NoConfirm`, `-WhatIf`, why the GPO passes `-NoConfirm`), "(asks first)" in the run-order table, startup-script row, §11 rollback table, troubleshooting rows, Appendix A/B/C (2005, 3006). Config README: see the config log. Links: GPO 18/18, config 23/23 resolve; no Claude mentions.
+- **Open:** `4_GPO_validate_gpos.ps1` now reports **4 FAIL** on the live GPOs (startup script and task of both lack `-NoConfirm`) because they were published before this change. Building and publishing a new pair (`1_` → `2_ -NoConfirm`) fixes it and ships the new endpoint script. **Not done; waiting for the user.** → done below.
+
+### Operation — Republish in **Audit** (new endpoint script + `-NoConfirm`) — ✅ 2026-10-24 02:21 – 02:23
+- **User decision:** *"I don't want the machine to be in enforcing mode. Once Audit is back and correct …"* Links before and after: Audit **enabled**, Enforce disabled (unchanged).
+- `1_GPO_build_packages.ps1` (02:21:34) → PASSED: pair **`2026.10.24.3` / `2026.10.24.4`**, package `Packages\20261024-022134` (Audit `.cip` SHA-256 `DEE8B2FB…8530`, Enforce `0C457AC9…305C`); now contains the new `Deploy-WDACPolicy.ps1`.
+- `2_GPO_create_gpos.ps1 -NoConfirm` (02:22:06) → yellow summary (*"publish Audit v2026.10.24.3 / Enforce v2026.10.24.4 … Enabled link now: JMSC-WDAC-PAWS - AppControl Audit"*), *-NoConfirm: continuing*, PASSED. Startup script and task now end in `-Mode <Mode> -NoConfirm`.
+- `4_GPO_validate_gpos.ps1` (02:22:09) → **PASSED** (the 4 FAILs are gone); active mode for the OU: **Audit**; Audit v.24.3 < Enforce v.24.4.
+- `gpupdate` + `WDAC-GPO-Deploy-Audit` (02:22:31, result 0; task arguments `… -Mode Audit -NoConfirm`). **First run of the new endpoint script under SYSTEM:** *"deployed v2026.10.24.3 (Audit), was v2026.10.24.1 … IsAuthorized True"* · *"Win32_DeviceGuard V-243450 kernel = 2 (ENFORCING), V-243451 user = 1 (AUDIT) (expected user 1 (AUDIT) for Audit)"*.
+- `5_GPO_validate_endpoint.ps1` (02:22:42) → **PASSED**, no WARN/FAIL: Audit GPO only; v.24.3 active = package; 3099 *"id GPO-AUDIT-2026.10.24.3. Status 0x0"*; `V-243450 kernel 2 (ENFORCING) / V-243451 user 1 (AUDIT)`. `7_DISA_STIG_CHECK.ps1` → `RESULT: 2 / 1 = ENFORCING / AUDIT`, effective policy `PAW-WDAC-GPO-Audit v2026.10.24.3 (AUDIT)`.
+- Round 2 of the allow list (git, gh, Az) continues on the reference device: see `C:\WDAC\results\WDAC-STIG-Walkthrough-Log.md`.
+
+### Correction — STIG terminology — ✅ 2026-10-24 02:30 – 02:35
+- **User:** *"the optional fix is important for accurate messaging."* Verified against the Microsoft Windows PAW STIG (stigviewer mirror, 2026-02-25 release): **V-243450 / V-243451 are Vulnerability (Finding) IDs**; **WPAW-00-001050 / WPAW-00-001060 are the STIG IDs**; both medium = **CAT II**; DISA check text names the values *0 Not Configured · 1 Audit · 2 Enforced*.
+- Diagram: the two finding cards now read *"STIG ID WPAW-00-001050 · CAT II · kernel mode"* / *"STIG ID WPAW-00-001060 · CAT II · user mode (UMCI)"*; banner *"Microsoft Windows PAW STIG · App Control"*. Regenerated (no overflow warnings) and reviewed visually. README §1.1 contains only the image embed; no copy of the old ASCII diagram exists anywhere under `C:\WDAC` (grep of its lines: no match). The GPO README only uses the Vulnerability IDs, correctly.
+
+### Change — versioned XML names in GPO packages — ✅ 2026-10-24 02:40
+- **`1_GPO_build_packages.ps1`:** `Packages\<stamp>\xml\` (never published to SYSVOL) now names the compiled XMLs with their versions (`PAW-WDAC-GPO-Audit_v<N>.xml`, `PAW-WDAC-GPO-Enforce_v<N+1>.xml`) and keeps `source_Base-Enforce_v<version>.xml`. The naming lines were unit-tested; the full build runs at the next package build.
+  - The config scripts now count this device's GPO package versions, so a reference device never stamps a local policy with a version that a published package already uses. Found on the live system: the round-2 merge would have taken v2026.10.24.4 = the Enforce package in SYSVOL.
+  - README §6 and §8.3 updated (later rounds → config README §11 Option D, `-BaseXml Base-Enforce.xml`).
+
+### Reference-device note — round 2 merged locally (Audit) — 2026-10-24 04:13
+- The config round 2 (git, gh, Az) deployed **PAW-WDAC-Audit-Merged v2026.10.24.5** (Audit) locally on this VM, which is also the only endpoint in the OU. That is above the published Audit package v2026.10.24.3. Expect the GPO task to log **2001** (*newer version active … not downgrading*), and `5_GPO_validate_endpoint.ps1` to flag active ≠ package, until a new pair is built from the screened policy and published (Audit link stays enabled). The OU stays in **Audit**; the Enforce link was not touched. Details: `C:\WDAC\results\WDAC-STIG-Walkthrough-Log.md`.
+- At 04:24:15 the scheduled task logged exactly that: *"v2026.10.24.5 is active, newer than the GPO's v2026.10.24.3 (Audit). Not downgrading"*.
+
+### Operation — publish round 2 (git, gh, Az) with the OU in **Audit** — ✅ 2026-10-24 04:33 – 04:36
+- **User decision:** *"Go with decision 2."* Links before and after: Audit **enabled**, Enforce disabled.
+- New reference `C:\WDAC\Source\Base-Enforce.xml` = **PAW-WDAC-Enforced v2026.10.24.6**: the screened round-2 policy with Audit Mode OFF, prepared and gate-checked without deploying (see the config log).
+- `0_GPO_pre-flight.ps1` (04:33:13) → PASSED with 2 expected WARNs: the reference device's active v.24.5 differs from `Base-Enforce.xml` v.24.6, and its STIG is `2 (ENFORCING) / 1 (AUDIT)`; the device is intentionally in Audit.
+- `1_GPO_build_packages.ps1` (04:33:18) → PASSED:
+  - pair **`2026.10.24.7` / `2026.10.24.8`**; options differ only by Audit Mode; FileRules (2,607) / Signers (228) identical; signers 228, allow 76, deny 2,357, FileAttrib 174;
+  - Audit `.cip` SHA-256 `61347594…549C`, Enforce `22F9FDC6…22BD`; package `Packages\20261024-043318`;
+  - first real run of the versioned `xml\` names: `PAW-WDAC-GPO-Audit_v2026.10.24.7.xml`, `PAW-WDAC-GPO-Enforce_v2026.10.24.8.xml`, `source_Base-Enforce_v2026.10.24.6.xml`.
+- `2_GPO_create_gpos.ps1 -NoConfirm` (04:33:51) → PASSED (yellow summary: *"publish Audit v2026.10.24.7 / Enforce v2026.10.24.8 … Enabled link now: … AppControl Audit"*). `4_GPO_validate_gpos.ps1` (04:33:54) → PASSED; payload hashes match on DC25-1; **active mode for the OU: Audit**.
+- `gpupdate` + `WDAC-GPO-Deploy-Audit` (04:34:17, result 0) → *"deployed v2026.10.24.7 (Audit), was v2026.10.24.5; CiTool now reports v2026.10.24.7, IsAuthorized True … run as NT AUTHORITY\SYSTEM"*.
+- `5_GPO_validate_endpoint.ps1` (04:34:20) → **PASSED**, no WARN/FAIL: 3099 *"id GPO-AUDIT-2026.10.24.7. Status 0x0"*; `V-243450 kernel 2 (ENFORCING) / V-243451 user 1 (AUDIT)`; supplemental authorized.
+- git, gh and Az re-run under the GPO-delivered policy → **0 × 3076, 0 × 3077** (04:34:40 onward).
+- **State:** OU in Audit; the VM is GPO-managed again at v2026.10.24.7; the SYSVOL Enforce package v2026.10.24.8 is ready, with the new rules, for a later `3_GPO_set_mode.ps1 -Mode Enforce`. It still contains the 12 FileName-only rules (open decision). → superseded below.
+
+### Operation — publish round 2b (file-name rules removed), OU stays in **Audit** — ✅ 2026-10-24 05:21 – 05:23
+- **User:** *"do whatever you feel is easiest for long term maint."* The 12 unsigned file-name rules were removed. They are redundant with the Git path and folder rules, and can be spoofed. The reference was rebuilt with the hardened config scripts (config log, round 2b). New reference: `Base-Enforce.xml` = **PAW-WDAC-Enforced v2026.10.24.10**, prepared with the new `6_enforce_policy.ps1 -PrepareOnly`, so nothing was deployed locally.
+- `1_GPO_build_packages.ps1` (05:21:13) → PASSED:
+  - pair **`2026.10.24.11` / `2026.10.24.12`**; options differ only by Audit Mode; signers 228, **allow 66** (76 − 10 unique file-name rules), deny 2,357, FileAttrib 174;
+  - Audit `.cip` SHA-256 `AB19EF6D…F482`, Enforce `74A25C73…D00B`; package `Packages\20261024-052113`.
+- `2_GPO_create_gpos.ps1 -NoConfirm` (05:21:37) → PASSED; links unchanged (Audit enabled, Enforce disabled). `4_GPO_validate_gpos.ps1` (05:21:40) → PASSED; hashes match on DC25-1; **active mode: Audit**.
+- `gpupdate` + task (05:22:07, result 0) → *"deployed v2026.10.24.11 (Audit), was v2026.10.24.9 … IsAuthorized True … NT AUTHORITY\SYSTEM"*.
+- `5_GPO_validate_endpoint.ps1` (05:22:09) → **PASSED**: 3099 *"id GPO-AUDIT-2026.10.24.11. Status 0x0"*; `V-243450 kernel 2 (ENFORCING) / V-243451 user 1 (AUDIT)`.
+- git, gh and Az under the GPO policy → **0 × 3076, 0 × 3077** (05:22:13 onward).
+- **State:** OU in Audit; VM GPO-managed at v2026.10.24.11. The SYSVOL **Enforce package v2026.10.24.12** has the full allow list (round 1 + `C:\ADMIN\*` + git/gh/Az) and **no file-name rules**: ready for a later `3_GPO_set_mode.ps1 -Mode Enforce` when the user decides. No open rule decisions.
+
+### Decision + documentation pass — 2026-10-24 05:35
+- **User:** *"No thanks ..do not move to enforce. Does any documentation require updating?"* The OU **stays in Audit**; the links were checked again: Audit enabled, Enforce disabled.
+- **Docs brought up to date with today's changes:**
+  - GPO README §1.3 *Proven On*: three rows added (Enforce → Audit, Y/N + `-NoConfirm`, adding applications in a later round).
+  - GPO README §2 and §5: the reference device may stay in Audit for a later round (`-PrepareOnly`); expect two pre-flight WARNs then.
+  - GPO README §1.1 caption: new size.
+- **Diagram regenerated** (1600 × 1828, no overflow; reviewed visually):
+  - reference card: enforce-ready via script 6 / `-PrepareOnly`; "2, 3 and 6 ask Y/N · -NoConfirm";
+  - domain card: scripts.ini + task run `… -Mode <Mode> -NoConfirm`;
+  - endpoint card: Y/N on manual runs, 3006, event range 1000–3006;
+  - Change-mode / Roll-back chips: Y/N, `-WhatIf`, `-NoConfirm`.
+- **Config README:**
+  - §1.3 workflow: sanitize drops file-name rules; `6 -PrepareOnly`; "Later · Add apps" line;
+  - §1.4 golden rules 3 and 7;
+  - §1.5 *Prepared for GPO* row;
+  - §4 rows 9 and 14.
+- Links: config 23/23, GPO 18/18; no Claude mentions; upload manifest 33 files.
+- Not changed: `GPO-Deployment-Report.html` and `C:\WDAC\results\WDAC-STIG-Walkthrough-Report.html`. They are point-in-time records of 10/23.
