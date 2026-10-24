@@ -1,3 +1,0 @@
-"Status","Check","Detail"
-"OK","Version plan","next pair 2026.10.23.1 / 2026.10.23.2 - today 2026-10-23, counter 1; highest known v2026.10.21.5 (source XML, this device's active policy, earlier packages, 2 published GPO payload(s))"
-"FAIL","Build","STOP: -AuditVersion 2026.10.21.5 is not higher than v2026.10.21.5, which is already known for {75AFC1CF-5372-491A-80CA-7BBB694F0A00} - endpoints would ignore it. Use 2026.10.23.1 or higher (or omit -AuditVersion)."

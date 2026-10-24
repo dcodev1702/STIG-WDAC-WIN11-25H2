@@ -1,3 +1,0 @@
-"Status","Check","Detail"
-"OK","Inputs","package C:\WDAC\GPO\scripts\2_GPO_create_gpos.ps1 | OU OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local | PDC DC25-1.skynet-home.local | task every 4 h"
-"FAIL","Create / update","STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation."
