@@ -1,0 +1,77 @@
+{
+  "width": 1600,
+  "title": "WDAC REFERENCE POLICY WORKFLOW",
+  "subtitle": ["APP CONTROL FOR BUSINESS", "AUDIT → MERGE → ENFORCE", "ONE POLICY GUID", "DATE-BASED VERSIONS", "PAW STIG V-243450 / V-243451"],
+  "description": "One reference PAW builds its App Control policy in six phases. Phases 1 and 2 prepare the device and deploy an audit-mode baseline. Phases 3 and 4 run every needed application, turn the logged 3076 events into allow rules, sanitize them, merge them into the base policy and screen until no new events appear. Phases 5 and 6 turn Audit Mode off, deploy the enforced policy and verify the two STIG findings V-243450 and V-243451. All stages keep one policy GUID with a rising date-based version, apply live with CiTool, and record their evidence.",
+  "badge": { "text": "Windows 11 Enterprise 22H2+ · CiTool · PS 7 or 5.1", "color": "green" },
+  "container": { "label": "Reference PAW", "color": "green", "note": "C:\\WDAC\\{Source,Compiled,Events,Logs} · scripts in C:\\WDAC-Scripts · every step writes a transcript" },
+  "cards": [
+    {
+      "accent": "cyan", "icon": "windows", "title": "PREPARE + BASELINE", "subtitle": "phases 1-2 · steps 0-2 · audit",
+      "sections": [
+        { "label": "Role", "text": "Set up the PAW and load an audit-mode baseline, so Windows starts logging what it would block" },
+        { "label": "Step 0 · pre-flight", "bullets": ["0_pre-flight.ps1: folders, transcript, ConfigCI, CI log ≥ 100 MB", "Starting STIG recorded (often 2 / 1 on new builds)", "Managed installer readiness (MECM / Intune, option 13)"] },
+        { "label": "Steps 1-1.1 · baseline", "dot": "violet", "bullets": ["[Wizard] Base-Audit.xml: allow Microsoft, Audit Mode, block lists", "0_1_validate_base_policy.ps1: options, block lists, -AllowWSL"] },
+        { "label": "Step 2 · deploy v1", "dot": "amber", "bullets": ["1_compile_and_deploy.ps1: stamp v1, Y/N, compile, CiTool", "2_audit_policy_activation.ps1: STIG, CiTool list, Event 3099"] }
+      ],
+      "callout": { "kind": "Important", "title": "deploy before you capture", "text": "The Wizard only writes XML. Windows logs no Event 3076 until a compiled .cip is loaded." },
+      "footer": "AUDIT · USER MODE 1 (AUDIT) · NOTHING BLOCKED"
+    },
+    {
+      "accent": "amber", "tint": true, "icon": "flow", "title": "CAPTURE + MERGE", "subtitle": "phases 3-4 · steps 3-5 · audit",
+      "sections": [
+        { "label": "Role", "text": "Turn what the apps actually load into allow rules, then prove nothing is missing" },
+        { "label": "Step 3 · run the apps", "bullets": ["Reboot, then run EVERY app you need (Event 3076)", "Never launch the block-test app"] },
+        { "label": "Step 4 · events to rules", "dot": "violet", "bullets": ["3_capture_ciaudit_events.ps1: time-boxed 3076 + 3089 export", "[Wizard] Events-Allow.xml: Publisher, FilePublisher, Path", "3_1_validate_winevent_rules.ps1: compile + merge test, drops file-name rules"] },
+        { "label": "Step 5 · merge v2 + screen", "bullets": ["4_merge…: base FIRST + events SECOND, v2, Y/N, deploy", "-AdditionalFolderRules for admin-only app folders", "5_audit_merged_events.ps1: 0 new 3076 = ready"] }
+      ],
+      "callout": { "kind": "Tip", "title": "loop until clean", "text": "New 3076 for an app you need? Repeat steps 4 and 5 before you enforce." },
+      "footer": "AUDIT · LOOP UNTIL 0 NEW 3076"
+    },
+    {
+      "accent": "green", "icon": "shield", "title": "ENFORCE + VERIFY", "subtitle": "phases 5-6 · steps 6-8 · enforce",
+      "sections": [
+        { "label": "Role", "text": "Switch the screened policy to enforce and prove both STIG findings close" },
+        { "label": "Steps 6-7 · enforce v3", "bullets": ["[Wizard] Audit Mode OFF in Base-Enforce.xml", "6_enforce_policy.ps1: gate, stamp v3, Y/N, compile, CiTool", { "text": "6 -PrepareOnly: same gate, nothing deployed (GPO guide)", "dot": "violet" }] },
+        { "label": "Step 8 · verify", "bullets": ["7_DISA_STIG_CHECK.ps1: 2 (ENFORCING) / 2 (ENFORCING)", "8_validate_multipolicy_layout.ps1: .cip layout, Event 3099", "Reboot: approved apps run, block-test app blocked (3077)", "New-WDACRunReport.ps1: one HTML report of the run"] }
+      ],
+      "callout": { "kind": "Critical", "title": "only audit mode may change", "text": "Script 6 stops if Audit Mode is not the only option turned off, the GUID changed, or the block-test app is in the policy." },
+      "footer": "ENFORCED · V-243450 + V-243451 PASS"
+    }
+  ],
+  "connectors": ["steps 0-2 · v1", "steps 3-5 · v2", "steps 6-8 · v3"],
+  "bar": {
+    "label": "Policy files", "color": "violet",
+    "title": "One PolicyID GUID · Base-Audit.xml → Base-Audit-Merged.xml → Base-Enforce.xml",
+    "note": "Same GUID, rising VersionEx: each stage replaces the last in place (never -ResetPolicyID) · applied live with CiTool",
+    "right": "C:\\WDAC\\Source\\PolicyGuid.txt"
+  },
+  "corridor": {
+    "down": { "title": "Policy to the device", "sub": "CiTool --update-policy · live, no reboot (option 16)", "color": "cyan", "chips": ["Audit v1", "Merged v2", "Enforced v3"] },
+    "center": { "title": "CiTool.exe", "sub": "{GUID}.cip · multiple policy" },
+    "up": { "title": "Evidence back", "sub": "recorded at every stage", "color": "violet", "chips": ["3076 / 3089", "3077", "3099", "Win32_DeviceGuard"] }
+  },
+  "panel": {
+    "label": "STIG outcome + guardrails", "color": "blue", "note": "what each stage proves · what keeps the policy safe to change",
+    "banner": { "icon": "shield", "color": "violet", "title": "Microsoft Windows PAW STIG · App Control", "sub": "Win32_DeviceGuard  0 = OFF · 1 = AUDIT · 2 = ENFORCING · only 2 passes", "chips": ["Start 0/0 or 2/1", "Audit 2/1", "Enforced 2/2"] },
+    "columns": 3,
+    "cards": [
+      { "accent": "green", "icon": "shield", "title": "V-243450 · V-243451", "subtitle": "STIG IDs WPAW-00-001050 / -001060 · CAT II", "lines": ["Kernel- and user-mode code integrity (Win32_DeviceGuard)", "Audit stages read user mode 1 (AUDIT): still an open finding", "Enforced: both 2 (ENFORCING) = PASS (Not a Finding)"], "chips": ["7_DISA_STIG_CHECK.ps1", "every stage recorded"] },
+      { "accent": "orange", "icon": "version", "title": "Versions", "subtitle": "YYYY.MM.DD.N · local date", "lines": ["The counter N restarts at 1 each day", "Never below the highest known: active, XMLs, archives, GPO packages", "Windows replaces a policy only with a HIGHER version", "`Compiled\\PAW-WDAC-<Stage>_v<version>.xml + .cip`"], "chips": ["e.g. 2026.10.24.5", "no downgrade"] },
+      { "accent": "amber", "icon": "toggle", "title": "Y/N gate", "subtitle": "scripts 1, 4 and 6", "lines": ["Yellow summary: policy, version, GUID, effect", "Y applies it; N stops with nothing compiled or deployed", "-NoConfirm for MECM or scheduled tasks"], "chips": ["asks Y/N", "-NoConfirm"] },
+      { "accent": "cyan", "icon": "policy", "title": "Rule types", "subtitle": "update-proof first", "lines": ["Signed: Publisher or FilePublisher", "Unsigned in C:\\Program Files\\<App>: Path or folder rule", "File-name rules: removed by 3_1 (they match in any folder)"], "chips": ["Publisher", "Path / folder", "Hash last"] },
+      { "accent": "violet", "icon": "flow", "title": "Add apps later", "subtitle": "§11 Option D", "lines": ["New audit window, run the new apps, export, Wizard", "Merge INTO Base-Enforce.xml (-BaseXml) so earlier rules stay", "Screen, then enforce, or 6 -PrepareOnly for the GPO guide"], "chips": ["-BaseXml", "-PrepareOnly"] },
+      { "accent": "rose", "icon": "undo", "title": "Roll back", "subtitle": "§11 Options A-C", "lines": ["A: fix-forward to Audit with a higher version", "B: CiTool --remove-policy {GUID}", "C: restore the Hyper-V checkpoint"], "chips": ["A fix-forward", "B remove", "C checkpoint"] }
+    ]
+  },
+  "legend": [
+    { "label": "Prepare + baseline (audit)", "color": "cyan" },
+    { "label": "Capture + merge (audit)", "color": "amber" },
+    { "label": "Enforce + verify", "color": "green" },
+    { "label": "Wizard step / policy files", "color": "violet", "shape": "dot" },
+    { "label": "Policy to the device (down)", "color": "cyan", "shape": "dot" },
+    { "label": "Evidence back (up)", "color": "violet", "shape": "dot" },
+    { "label": "Rollback", "color": "rose", "shape": "dot" }
+  ],
+  "footer": "C:\\WDAC\\config · app control for business · reference policy workflow · 2026"
+}
