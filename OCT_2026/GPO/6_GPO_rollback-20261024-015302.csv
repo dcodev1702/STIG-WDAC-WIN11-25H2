@@ -1,0 +1,2 @@
+"Status","Check","Detail"
+"FAIL","DisableLinks","STOP: this change needs a Y/N confirmation, but the session is non-interactive. Nothing was changed. Run the script in an interactive console, or add -NoConfirm for automation."
