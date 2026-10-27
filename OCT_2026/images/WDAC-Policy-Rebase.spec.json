@@ -1,0 +1,78 @@
+{
+  "width": 1600,
+  "title": "WDAC POLICY REBASE",
+  "subtitle": ["APP CONTROL FOR BUSINESS", "NEW BASELINE", "NO RECOMMENDED BLOCK RULES", "LOCAL · NO GPO", "ROUTE A OR ROUTE B"],
+  "description": "The rebase replaces the App Control base policy on a PAW with a new Wizard baseline that has both Recommended Block Rules boxes unchecked, deployed locally without GPO. Steps 0 to 2 back up the device, take it out of GPO scope and build the new baseline. Steps 3 to 7 validate it and swap the base policy in Audit, either with a new GUID (Route A: remove the old policy, re-create its supplementals; every step documented by Microsoft) or by keeping the GUID (Route B: an undocumented XML edit, then an in-place replacement). Steps 8 and 9 capture every application again, merge and screen, then enforce and verify V-243450 and V-243451.",
+  "badge": { "text": "Windows 11 22H2+ · unsigned policy · CiTool · PS 7 or 5.1", "color": "green" },
+  "container": { "label": "PAW being rebased", "color": "cyan", "note": "backup in C:\\WDAC\\Backups\\Rebase-<timestamp> · scripts in C:\\WDAC-Scripts · both block-list boxes unchecked" },
+  "cards": [
+    {
+      "accent": "cyan", "icon": "windows", "title": "PREPARE", "subtitle": "steps 0-2 · nothing deployed",
+      "sections": [
+        { "label": "Role", "text": "Make the change reversible, take the device away from the GPO, and build the new baseline" },
+        { "label": "Step 0 · safety net", "bullets": ["Hyper-V checkpoint (or a full backup)", "Back up C:\\WDAC\\Source and C:\\WDAC\\Events", "Record the old GUID: OldPolicyGuid.txt"] },
+        { "label": "Step 1 · leave GPO scope", "dot": "violet", "bullets": ["Move the computer out of the WDAC GPOs' OU", "gpupdate: AppControl GPO and WDAC-GPO-Deploy task gone", "The old .cip stays on the device until step 5 or 6"] },
+        { "label": "Step 2 · Wizard", "dot": "violet", "bullets": ["[Wizard] Allow Microsoft, Multiple Policy Format, Audit ON", { "text": "Both Merge with Recommended Block Rules boxes UNCHECKED", "dot": "amber" }] }
+      ],
+      "callout": { "kind": "Important", "title": "leave the GPO first", "text": "A GPO still in scope redeploys its policy: Route A would end with two base policies, Route B gets replaced." },
+      "footer": "NO POLICY CHANGE YET"
+    },
+    {
+      "accent": "amber", "tint": true, "icon": "flow", "title": "SWAP THE BASE POLICY", "subtitle": "steps 3-7 · audit",
+      "sections": [
+        { "label": "Role", "text": "Validate the new baseline and put it in place of the old base policy, in Audit" },
+        { "label": "Step 4 · validate (both routes)", "bullets": ["0_1_validate_base_policy.ps1 ends with PASSED", "2 x WARN: no deny rules in scenario 12 / 131 = boxes unchecked"] },
+        { "label": "Route A · new GUID · documented", "dot": "green", "bullets": ["5: CiTool --remove-policy old base + its supplementals", "6: scripts 1 + 2 deploy the baseline, new GUID", "7: re-create supplementals (-SupplementsBasePolicyID)"] },
+        { "label": "Route B · keep GUID · not documented", "dot": "rose", "bullets": ["3: write the old GUID into Base-Audit.xml (XML edit)", "6: scripts 1 + 2 replace the policy in place", "Supplementals stay attached, unchanged"] }
+      ],
+      "callout": { "kind": "Critical", "title": "route B step 3 is undocumented", "text": "No cmdlet sets a chosen GUID. Microsoft recommends the Wizard or ConfigCI cmdlets over editing the XML." },
+      "footer": "AUDIT · USER MODE 1 (AUDIT) · NOTHING BLOCKED"
+    },
+    {
+      "accent": "green", "icon": "shield", "title": "REBUILD + ENFORCE", "subtitle": "steps 8-9 · audit, then enforce",
+      "sections": [
+        { "label": "Role", "text": "Capture every application again on the new baseline, then enforce when you decide" },
+        { "label": "Step 8 · audit cycle", "bullets": ["Reboot, run EVERY app: earlier allow rules are gone", "3_capture → [Wizard] → 3_1 → 4 → 5, no -BaseXml", "-AdditionalFolderRules for admin-only app folders", "Loop until script 5 reports 0 new 3076"] },
+        { "label": "Step 9 · enforce + verify", "bullets": ["[Wizard] Audit Mode OFF in Base-Enforce*.xml", "6_enforce_policy.ps1, then 7_DISA_STIG_CHECK.ps1", "8_validate_multipolicy_layout.ps1: .cip layout, Event 3099", "Reboot, approved apps run, block-test app gets 3077"] }
+      ],
+      "callout": { "kind": "Critical", "title": "never merge the old reference", "text": "The old Base-Enforce.xml and Base-Audit-Merged.xml hold the block rules. Merging them brings the rules back." },
+      "footer": "ENFORCED · 2 (ENFORCING) / 2 (ENFORCING)"
+    }
+  ],
+  "connectors": ["steps 0-2 · backup", "steps 3-7 · baseline", "steps 8-9 · merged → enforced"],
+  "bar": {
+    "label": "Policy files", "color": "violet",
+    "title": "New Base-Audit.xml (no block rules) → Base-Audit-Merged.xml → Base-Enforce.xml",
+    "note": "Old files stay in the Step 0 backup · after the swap, every revision keeps the new baseline's GUID and raises VersionEx",
+    "right": "C:\\WDAC\\Source\\PolicyGuid.txt"
+  },
+  "corridor": {
+    "down": { "title": "Policy to the device", "sub": "CiTool --update-policy · --remove-policy (Route A)", "color": "cyan", "chips": ["remove old (A)", "baseline", "merged", "enforced"] },
+    "center": { "title": "CiTool.exe", "sub": "{GUID}.cip · unsigned · live" },
+    "up": { "title": "Evidence back", "sub": "checked at every step", "color": "violet", "chips": ["3076", "3077", "3099", "Win32_DeviceGuard"] }
+  },
+  "panel": {
+    "label": "Route choice + guardrails", "color": "blue", "note": "pick one route before step 3 · what keeps the rebase safe",
+    "banner": { "icon": "flow", "color": "violet", "title": "Route A (new GUID) or Route B (keep the GUID)", "sub": "both end the same: one base policy in Audit, rebuilt, then enforced", "chips": ["A recommended", "B fewer steps"] },
+    "columns": 3,
+    "cards": [
+      { "accent": "green", "icon": "check", "title": "Route A · new GUID", "subtitle": "documented · recommended", "lines": ["Keep the Wizard's random GUID", "Step 5: CiTool -rp the old base + supplementals", "Step 7: supplementals re-created for the new base", "Script 1 writes the new GUID to PolicyGuid.txt"], "chips": ["MS Learn · Remove policies", "MS Learn · Enforce policies"] },
+      { "accent": "rose", "icon": "policy", "title": "Route B · keep the GUID", "subtitle": "fewer steps · not documented", "lines": ["Step 3: old GUID into the new XML (XML edit)", "Script 1 picks a HIGHER version: in-place swap", "Supplementals keep working, PolicyGuid.txt unchanged", "Tested: compiles in PS 7 and 5.1"], "chips": ["XML edit", "no supplemental work"] },
+      { "accent": "violet", "icon": "tree", "title": "Leave GPO scope", "subtitle": "step 1 · GPO README §10.3", "lines": ["Move the computer object out of the WDAC OU", "gpupdate removes the task; the .cip stays", "Don't disable the GPOs: other devices use them"], "chips": ["Move-ADObject", "gpupdate"] },
+      { "accent": "amber", "icon": "shield", "title": "Two boxes unchecked", "subtitle": "§1.3 · the trade-off", "lines": ["User mode: Microsoft-signed bypass tools now allowed", "e.g. msbuild, mshta, wmic, wsl; -AllowWSL not needed", "Kernel mode: Windows' own driver blocklist still on"], "chips": ["check the driver blocklist"] },
+      { "accent": "cyan", "icon": "monitor", "title": "Read the mode first", "subtitle": "§1.2 · before you start", "lines": ["User mode (V-243451) gives the mode: 1 = AUDIT", "Kernel mode often reads 2 from built-in policies", "CiTool IsEnforced = True means active, not enforce"], "chips": ["7_DISA_STIG_CHECK.ps1"] },
+      { "accent": "rose", "icon": "undo", "title": "Roll back", "subtitle": "§5", "lines": ["Fastest: restore the Step 0 checkpoint", "Enforced, need Audit: README §11 Option A", "Back to GPO: A removes the new base; B needs a higher package"], "chips": ["checkpoint", "Option A", "GPO"] }
+    ]
+  },
+  "legend": [
+    { "label": "Prepare", "color": "cyan" },
+    { "label": "Swap (audit)", "color": "amber" },
+    { "label": "Rebuild + enforce", "color": "green" },
+    { "label": "Wizard / GPO / policy files", "color": "violet", "shape": "dot" },
+    { "label": "Route A (documented)", "color": "green", "shape": "dot" },
+    { "label": "Route B (undocumented) / rollback", "color": "rose", "shape": "dot" },
+    { "label": "Policy to the device (down)", "color": "cyan", "shape": "dot" },
+    { "label": "Evidence back (up)", "color": "violet", "shape": "dot" }
+  ],
+  "footer": "C:\\WDAC\\config · app control for business · policy rebase · 2026"
+}

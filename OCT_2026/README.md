@@ -383,6 +383,9 @@ Run every command below **on the PAW**: inside `Enter-PSSession -Session $PAWSes
 > [!WARNING]
 > **The Recommended User Mode Block Rules deny WSL.** They contain 6 deny rules covering every version of `bash.exe`, `lxrun.exe`, `LxssManager.dll`, `wsl.exe`, `wslconfig.exe`, and `wslhost.exe`. A deny **always beats an allow**, so WSL would be blocked once enforced no matter what the audit captures. If the PAW needs WSL, run Step 1.1 with **`-AllowWSL`**. Linux code *inside* WSL isn't governed by App Control, which is why Microsoft blocks WSL on locked-down devices. Allowing it is a deliberate trade-off.
 
+> [!TIP]
+> **Building a new baseline *without* these two block lists, on a device that already has this policy?** Follow [WDAC-POLICY-REBASE.md](WDAC-POLICY-REBASE.md). It covers both modes (Audit or Enforce) and both delivery methods (GPO or local).
+
 ### Step 1.1 — Validate the Wizard Output (`0_1_validate_base_policy.ps1`)
 
 ```powershell
@@ -765,6 +768,17 @@ Use this when the PAW is already enforced, or its policy comes from the GPO guid
 
 > [!NOTE]
 > To remove the **managed installer** itself, clear the managed-installer AppLocker policy from the device (and disable the Intune managed-installer policy, if used).
+
+### Option E — Rebuild the Baseline From Scratch (Rebase)
+
+Use this option when the base policy itself must change, not just its allow list. For example: a new Wizard baseline without the Recommended User Mode and Kernel Mode Block Rules.
+
+Follow **[WDAC-POLICY-REBASE.md](WDAC-POLICY-REBASE.md)**. It:
+- takes the device out of GPO scope;
+- deploys the new baseline in Audit;
+- rebuilds the allow list with Steps 3 – 8.
+
+It offers two routes: **Route A** gives the policy a new GUID, and every step is in Microsoft's documentation. **Route B** keeps the current GUID, but one of its steps is a direct XML edit that no documentation describes.
 
 ---
 

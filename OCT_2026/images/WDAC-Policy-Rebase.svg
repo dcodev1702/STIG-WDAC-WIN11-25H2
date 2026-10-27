@@ -1,0 +1,306 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1776" width="1600" height="1776" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">WDAC POLICY REBASE</title>
+  <desc id="d">The rebase replaces the App Control base policy on a PAW with a new Wizard baseline that has both Recommended Block Rules boxes unchecked, deployed locally without GPO. Steps 0 to 2 back up the device, take it out of GPO scope and build the new baseline. Steps 3 to 7 validate it and swap the base policy in Audit, either with a new GUID (Route A: remove the old policy, re-create its supplementals; every step documented by Microsoft) or by keeping the GUID (Route B: an undocumented XML edit, then an in-place replacement). Steps 8 and 9 capture every application again, merge and screen, then enforce and verify V-243450 and V-243451.</desc>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#070b16"/><stop offset="0.55" stop-color="#0a0e1a"/><stop offset="1" stop-color="#0b1020"/></linearGradient>
+    <linearGradient id="hostGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#101728" stop-opacity="0.95"/><stop offset="1" stop-color="#0b1020" stop-opacity="0.95"/></linearGradient>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131c31"/><stop offset="1" stop-color="#0c1322"/></linearGradient>
+    <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2c1e48"/><stop offset="0.5" stop-color="#372356"/><stop offset="1" stop-color="#2c1e48"/></linearGradient>
+    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f1b39"/><stop offset="1" stop-color="#0a1024"/></linearGradient>
+    <linearGradient id="bannerGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#352253"/><stop offset="0.5" stop-color="#462b6a"/><stop offset="1" stop-color="#352253"/></linearGradient>
+    <linearGradient id="titleLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00d4ff"/><stop offset="0.5" stop-color="#b660ff"/><stop offset="1" stop-color="#ff5ec4"/></linearGradient>
+    <linearGradient id="cardTint1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2928"/><stop offset="1" stop-color="#0c1322"/></linearGradient>
+    <linearGradient id="laneDown" gradientUnits="userSpaceOnUse" x1="0" y1="979" x2="0" y2="1147"><stop offset="0" stop-color="#00d4ff" stop-opacity="0.18"/><stop offset="0.55" stop-color="#00d4ff" stop-opacity="0.75"/><stop offset="1" stop-color="#00d4ff"/></linearGradient><linearGradient id="laneUp" gradientUnits="userSpaceOnUse" x1="0" y1="1147" x2="0" y2="979"><stop offset="0" stop-color="#b660ff" stop-opacity="0.18"/><stop offset="0.55" stop-color="#b660ff" stop-opacity="0.75"/><stop offset="1" stop-color="#b660ff"/></linearGradient>
+    <filter id="neonGlow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="arrDown" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3.6" markerHeight="3.6" orient="auto" markerUnits="strokeWidth"><path d="M0 0 L10 5 L0 10 Z" fill="#00d4ff"/></marker>
+    <marker id="arrUp" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3.6" markerHeight="3.6" orient="auto" markerUnits="strokeWidth"><path d="M0 0 L10 5 L0 10 Z" fill="#b660ff"/></marker>
+  </defs>
+  <rect width="1600" height="1776" fill="url(#bgGrad)"/>
+  <g stroke="#1a2238" stroke-width="0.5" opacity="0.35"><path d="M0 100 H1600 M0 200 H1600 M0 300 H1600 M0 400 H1600 M0 500 H1600 M0 600 H1600 M0 700 H1600 M0 800 H1600 M0 900 H1600 M0 1000 H1600 M0 1100 H1600 M0 1200 H1600 M0 1300 H1600 M0 1400 H1600 M0 1500 H1600 M0 1600 H1600 M0 1700 H1600 M100 0 V1776 M200 0 V1776 M300 0 V1776 M400 0 V1776 M500 0 V1776 M600 0 V1776 M700 0 V1776 M800 0 V1776 M900 0 V1776 M1000 0 V1776 M1100 0 V1776 M1200 0 V1776 M1300 0 V1776 M1400 0 V1776 M1500 0 V1776"/></g>
+<text x="40" y="58" fill="#e8eef7" font-size="30" font-weight="700" letter-spacing="0.6">WDAC POLICY REBASE</text>
+<text x="40" y="86" fill="#7b8aa6" font-size="14" letter-spacing="1.4">APP CONTROL FOR BUSINESS · NEW BASELINE · NO RECOMMENDED BLOCK RULES · LOCAL · NO GPO · ROUTE A OR ROUTE B</text>
+<rect x="40" y="98" width="440" height="3" rx="1.5" fill="url(#titleLine)" />
+<rect x="1077.6" y="40" width="482.41" height="34" rx="17" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<circle cx="1097.6" cy="57" r="5" fill="#4ade80" filter="url(#softGlow)"/>
+<text x="1113.6" y="62" fill="#cfe9ff" font-size="12.5" font-weight="600" letter-spacing="0.8">WINDOWS 11 22H2+ · UNSIGNED POLICY · CITOOL · PS 7 OR 5.1</text>
+<rect x="40" y="130" width="1520" height="845" rx="22" fill="url(#hostGrad)" stroke="#2a3450" stroke-width="1.5" />
+<rect x="62" y="152" width="199.72" height="32" rx="6" fill="#0a1124" stroke="#00d4ff" stroke-width="1" />
+<circle cx="78" cy="168" r="4" fill="#00d4ff" filter="url(#softGlow)"/>
+<text x="94" y="173" fill="#ccf6ff" font-size="13" font-weight="600" letter-spacing="1.2">PAW BEING REBASED</text>
+<text x="277.72" y="173" fill="#64748b" font-size="12">backup in C:\WDAC\Backups\Rebase-&lt;timestamp&gt; · scripts in C:\WDAC-Scripts · both block-list boxes unchecked</text>
+<g transform="translate(62,220)">
+<rect x="0" y="0" width="456" height="545" rx="14" fill="url(#cardGrad)" stroke="#00d4ff" stroke-width="1.5" />
+<rect x="0" y="0" width="456" height="6" rx="3" fill="#00d4ff" filter="url(#neonGlow)"/>
+<g transform="translate(22,26) scale(1)" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x='0' y='0' width='15' height='15' rx='2' fill='#00d4ff' stroke='none'/><rect x='19' y='0' width='15' height='15' rx='2' fill='#00d4ff' stroke='none'/><rect x='0' y='19' width='15' height='15' rx='2' fill='#00d4ff' stroke='none'/><rect x='19' y='19' width='15' height='15' rx='2' fill='#00d4ff' stroke='none'/></g>
+<text x="76" y="42" fill="#e8eef7" font-size="19" font-weight="700">PREPARE</text>
+<text x="76" y="62" fill="#00d4ff" font-size="12" font-weight="600" letter-spacing="1.5">STEPS 0-2 · NOTHING DEPLOYED</text>
+<line x1="22" y1="86" x2="434" y2="86" stroke="#2a3450"/>
+<text x="22" y="106" fill="#94a3b8" font-size="11" letter-spacing="1.2">ROLE</text>
+<text x="22" y="124" fill="#cbd5e1" font-size="13">Make the change reversible, take the device away from the GPO, and</text>
+<text x="22" y="142" fill="#cbd5e1" font-size="13">build the new baseline</text>
+<text x="22" y="170" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 0 · SAFETY NET</text>
+<circle cx="26" cy="186.5" r="3" fill="#00d4ff" />
+<text x="36" y="190" fill="#e2e8f0" font-size="12.5">Hyper-V checkpoint (or a full backup)</text>
+<circle cx="26" cy="206.5" r="3" fill="#00d4ff" />
+<text x="36" y="210" fill="#e2e8f0" font-size="12.5">Back up C:\WDAC\Source and C:\WDAC\Events</text>
+<circle cx="26" cy="226.5" r="3" fill="#00d4ff" />
+<text x="36" y="230" fill="#e2e8f0" font-size="12.5">Record the old GUID: OldPolicyGuid.txt</text>
+<text x="22" y="258" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 1 · LEAVE GPO SCOPE</text>
+<circle cx="26" cy="274.5" r="3" fill="#b660ff" />
+<text x="36" y="278" fill="#e2e8f0" font-size="12.5">Move the computer out of the WDAC GPOs&apos; OU</text>
+<circle cx="26" cy="294.5" r="3" fill="#b660ff" />
+<text x="36" y="298" fill="#e2e8f0" font-size="12.5">gpupdate: AppControl GPO and WDAC-GPO-Deploy task gone</text>
+<circle cx="26" cy="314.5" r="3" fill="#b660ff" />
+<text x="36" y="318" fill="#e2e8f0" font-size="12.5">The old .cip stays on the device until step 5 or 6</text>
+<text x="22" y="346" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 2 · WIZARD</text>
+<circle cx="26" cy="362.5" r="3" fill="#b660ff" />
+<text x="36" y="366" fill="#e2e8f0" font-size="12.5">[Wizard] Allow Microsoft, Multiple Policy Format, Audit ON</text>
+<circle cx="26" cy="382.5" r="3" fill="#fbbf24" />
+<text x="36" y="386" fill="#e2e8f0" font-size="12.5">Both Merge with Recommended Block Rules boxes UNCHECKED</text>
+<rect x="22" y="406" width="412" height="59" rx="8" fill="#0a1124" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.55" />
+<text x="38" y="424" fill="#fcd571" font-size="11" font-weight="700" letter-spacing="0.8">IMPORTANT · LEAVE THE GPO FIRST</text>
+<text x="38" y="442" fill="#eee0b8" font-size="11">A GPO still in scope redeploys its policy: Route A would end with two base</text>
+<text x="38" y="457" fill="#eee0b8" font-size="11">policies, Route B gets replaced.</text>
+<rect x="22" y="481" width="412" height="38" rx="8" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.45" />
+<circle cx="40" cy="500" r="4" fill="#00d4ff" filter="url(#softGlow)"/>
+<text x="54" y="505" fill="#cfe9ff" font-size="12" font-weight="600">NO POLICY CHANGE YET</text>
+</g>
+<g transform="translate(572,220)">
+<rect x="0" y="0" width="456" height="545" rx="14" fill="url(#cardTint1)" stroke="#fbbf24" stroke-width="1.5" />
+<rect x="0" y="0" width="456" height="6" rx="3" fill="#fbbf24" filter="url(#neonGlow)"/>
+<g transform="translate(22,26) scale(1)" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx='6' cy='17' r='4'/><circle cx='28' cy='17' r='4'/><path d='M10 17 H22 M18 13 L22 17 L18 21'/></g>
+<text x="76" y="42" fill="#e8eef7" font-size="19" font-weight="700">SWAP THE BASE POLICY</text>
+<text x="76" y="62" fill="#fbbf24" font-size="12" font-weight="600" letter-spacing="1.5">STEPS 3-7 · AUDIT</text>
+<line x1="22" y1="86" x2="434" y2="86" stroke="#2a3450"/>
+<text x="22" y="106" fill="#94a3b8" font-size="11" letter-spacing="1.2">ROLE</text>
+<text x="22" y="124" fill="#cbd5e1" font-size="13">Validate the new baseline and put it in place of the old base policy, in</text>
+<text x="22" y="142" fill="#cbd5e1" font-size="13">Audit</text>
+<text x="22" y="170" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 4 · VALIDATE (BOTH ROUTES)</text>
+<circle cx="26" cy="186.5" r="3" fill="#fbbf24" />
+<text x="36" y="190" fill="#e2e8f0" font-size="12.5">0_1_validate_base_policy.ps1 ends with PASSED</text>
+<circle cx="26" cy="206.5" r="3" fill="#fbbf24" />
+<text x="36" y="210" fill="#e2e8f0" font-size="12.5">2 x WARN: no deny rules in scenario 12 / 131 = boxes unchecked</text>
+<text x="22" y="238" fill="#94a3b8" font-size="11" letter-spacing="1.2">ROUTE A · NEW GUID · DOCUMENTED</text>
+<circle cx="26" cy="254.5" r="3" fill="#4ade80" />
+<text x="36" y="258" fill="#e2e8f0" font-size="12.5">5: CiTool --remove-policy old base + its supplementals</text>
+<circle cx="26" cy="274.5" r="3" fill="#4ade80" />
+<text x="36" y="278" fill="#e2e8f0" font-size="12.5">6: scripts 1 + 2 deploy the baseline, new GUID</text>
+<circle cx="26" cy="294.5" r="3" fill="#4ade80" />
+<text x="36" y="298" fill="#e2e8f0" font-size="12.5">7: re-create supplementals (-SupplementsBasePolicyID)</text>
+<text x="22" y="326" fill="#94a3b8" font-size="11" letter-spacing="1.2">ROUTE B · KEEP GUID · NOT DOCUMENTED</text>
+<circle cx="26" cy="342.5" r="3" fill="#fb7185" />
+<text x="36" y="346" fill="#e2e8f0" font-size="12.5">3: write the old GUID into Base-Audit.xml (XML edit)</text>
+<circle cx="26" cy="362.5" r="3" fill="#fb7185" />
+<text x="36" y="366" fill="#e2e8f0" font-size="12.5">6: scripts 1 + 2 replace the policy in place</text>
+<circle cx="26" cy="382.5" r="3" fill="#fb7185" />
+<text x="36" y="386" fill="#e2e8f0" font-size="12.5">Supplementals stay attached, unchanged</text>
+<rect x="22" y="406" width="412" height="59" rx="8" fill="#0a1124" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.55" />
+<text x="38" y="424" fill="#fcd571" font-size="11" font-weight="700" letter-spacing="0.8">CRITICAL · ROUTE B STEP 3 IS UNDOCUMENTED</text>
+<text x="38" y="442" fill="#eee0b8" font-size="11">No cmdlet sets a chosen GUID. Microsoft recommends the Wizard or ConfigCI</text>
+<text x="38" y="457" fill="#eee0b8" font-size="11">cmdlets over editing the XML.</text>
+<rect x="22" y="481" width="412" height="38" rx="8" fill="#0a1124" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.45" />
+<circle cx="40" cy="500" r="4" fill="#fbbf24" filter="url(#softGlow)"/>
+<text x="54" y="505" fill="#cfe9ff" font-size="12" font-weight="600">AUDIT · USER MODE 1 (AUDIT) · NOTHING BLOCKED</text>
+</g>
+<g transform="translate(1082,220)">
+<rect x="0" y="0" width="456" height="545" rx="14" fill="url(#cardGrad)" stroke="#4ade80" stroke-width="1.5" />
+<rect x="0" y="0" width="456" height="6" rx="3" fill="#4ade80" filter="url(#neonGlow)"/>
+<g transform="translate(22,26) scale(1)" fill="none" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d='M17 1 L32 7 V19 C32 27 25 32 17 33 C9 32 2 27 2 19 V7 Z'/><path d='M10 17 L15 22 L24 12'/></g>
+<text x="76" y="42" fill="#e8eef7" font-size="19" font-weight="700">REBUILD + ENFORCE</text>
+<text x="76" y="62" fill="#4ade80" font-size="12" font-weight="600" letter-spacing="1.5">STEPS 8-9 · AUDIT, THEN ENFORCE</text>
+<line x1="22" y1="86" x2="434" y2="86" stroke="#2a3450"/>
+<text x="22" y="106" fill="#94a3b8" font-size="11" letter-spacing="1.2">ROLE</text>
+<text x="22" y="124" fill="#cbd5e1" font-size="13">Capture every application again on the new baseline, then enforce</text>
+<text x="22" y="142" fill="#cbd5e1" font-size="13">when you decide</text>
+<text x="22" y="170" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 8 · AUDIT CYCLE</text>
+<circle cx="26" cy="186.5" r="3" fill="#4ade80" />
+<text x="36" y="190" fill="#e2e8f0" font-size="12.5">Reboot, run EVERY app: earlier allow rules are gone</text>
+<circle cx="26" cy="206.5" r="3" fill="#4ade80" />
+<text x="36" y="210" fill="#e2e8f0" font-size="12.5">3_capture → [Wizard] → 3_1 → 4 → 5, no -BaseXml</text>
+<circle cx="26" cy="226.5" r="3" fill="#4ade80" />
+<text x="36" y="230" fill="#e2e8f0" font-size="12.5">-AdditionalFolderRules for admin-only app folders</text>
+<circle cx="26" cy="246.5" r="3" fill="#4ade80" />
+<text x="36" y="250" fill="#e2e8f0" font-size="12.5">Loop until script 5 reports 0 new 3076</text>
+<text x="22" y="278" fill="#94a3b8" font-size="11" letter-spacing="1.2">STEP 9 · ENFORCE + VERIFY</text>
+<circle cx="26" cy="294.5" r="3" fill="#4ade80" />
+<text x="36" y="298" fill="#e2e8f0" font-size="12.5">[Wizard] Audit Mode OFF in Base-Enforce*.xml</text>
+<circle cx="26" cy="314.5" r="3" fill="#4ade80" />
+<text x="36" y="318" fill="#e2e8f0" font-size="12.5">6_enforce_policy.ps1, then 7_DISA_STIG_CHECK.ps1</text>
+<circle cx="26" cy="334.5" r="3" fill="#4ade80" />
+<text x="36" y="338" fill="#e2e8f0" font-size="12.5">8_validate_multipolicy_layout.ps1: .cip layout, Event 3099</text>
+<circle cx="26" cy="354.5" r="3" fill="#4ade80" />
+<text x="36" y="358" fill="#e2e8f0" font-size="12.5">Reboot, approved apps run, block-test app gets 3077</text>
+<rect x="22" y="406" width="412" height="59" rx="8" fill="#0a1124" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.55" />
+<text x="38" y="424" fill="#fcd571" font-size="11" font-weight="700" letter-spacing="0.8">CRITICAL · NEVER MERGE THE OLD REFERENCE</text>
+<text x="38" y="442" fill="#eee0b8" font-size="11">The old Base-Enforce.xml and Base-Audit-Merged.xml hold the block rules.</text>
+<text x="38" y="457" fill="#eee0b8" font-size="11">Merging them brings the rules back.</text>
+<rect x="22" y="481" width="412" height="38" rx="8" fill="#0a1124" stroke="#4ade80" stroke-width="1" stroke-opacity="0.45" />
+<circle cx="40" cy="500" r="4" fill="#4ade80" filter="url(#softGlow)"/>
+<text x="54" y="505" fill="#cfe9ff" font-size="12" font-weight="600">ENFORCED · 2 (ENFORCING) / 2 (ENFORCING)</text>
+</g>
+<path d="M290 765 V825" stroke="#00d4ff" stroke-width="2" stroke-dasharray="4 4" opacity="0.75" fill="none"/>
+<circle cx="290" cy="765" r="5" fill="#0a0e1a" stroke="#00d4ff" stroke-width="2" />
+<text x="302" y="799" fill="#7b8aa6" font-size="11" font-weight="600" letter-spacing="0.4">steps 0-2 · backup</text>
+<path d="M800 765 V825" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4 4" opacity="0.75" fill="none"/>
+<circle cx="800" cy="765" r="5" fill="#0a0e1a" stroke="#fbbf24" stroke-width="2" />
+<text x="812" y="799" fill="#7b8aa6" font-size="11" font-weight="600" letter-spacing="0.4">steps 3-7 · baseline</text>
+<path d="M1310 765 V825" stroke="#4ade80" stroke-width="2" stroke-dasharray="4 4" opacity="0.75" fill="none"/>
+<circle cx="1310" cy="765" r="5" fill="#0a0e1a" stroke="#4ade80" stroke-width="2" />
+<text x="1322" y="799" fill="#7b8aa6" font-size="11" font-weight="600" letter-spacing="0.4">steps 8-9 · merged → enforced</text>
+<rect x="120" y="825" width="1360" height="80" rx="14" fill="url(#barGrad)" stroke="#b660ff" stroke-width="1.5" filter="url(#softGlow)"/>
+<rect x="160" y="850" width="144.31" height="32" rx="6" fill="#0a1124" stroke="#b660ff" stroke-width="1" />
+<circle cx="176" cy="866" r="4" fill="#b660ff" filter="url(#softGlow)"/>
+<text x="192" y="871" fill="#f0dfff" font-size="13" font-weight="600" letter-spacing="1.4">POLICY FILES</text>
+<text x="364.31" y="861" fill="#edd7ff" font-size="13" font-weight="600">New Base-Audit.xml (no block rules) → Base-Audit-Merged.xml → Base-Enforce.xml</text>
+<text x="364.31" y="880" fill="#a385d8" font-size="11">Old files stay in the Step 0 backup · after the swap, every revision keeps the new baseline&apos;s GUID and raises VersionEx</text>
+<rect x="1255.57" y="850" width="204.43" height="32" rx="6" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.6" />
+<text x="1269.57" y="870" fill="#edd7ff" font-size="12" font-weight="600">C:\WDAC\Source\PolicyGuid.txt</text>
+<rect x="365" y="989" width="859" height="148" rx="16" fill="#080d1b" stroke="#1c2740" stroke-width="1" fill-opacity="0.55"/>
+<circle cx="700" cy="975" r="5.5" fill="#0a0e1a" stroke="#00d4ff" stroke-width="2.5" />
+<line x1="700" y1="979" x2="700" y2="1143" stroke="#00d4ff" stroke-width="15" opacity="0.12" stroke-linecap="round"/>
+<line x1="700" y1="979" x2="700" y2="1147" stroke="url(#laneDown)" stroke-width="5" stroke-dasharray="10 7" marker-end="url(#arrDown)"/>
+<text x="660" y="1023" fill="#80eaff" font-size="13" font-weight="700" letter-spacing="0.4" text-anchor="end">POLICY TO THE DEVICE</text>
+<text x="660" y="1041" fill="#3c9ab9" font-size="10.5" text-anchor="end">CiTool --update-policy · --remove-policy (Route A)</text>
+<rect x="405" y="1053" width="79.66" height="20" rx="10" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="444.83" y="1066.42" fill="#73e7ff" font-size="9.5" text-anchor="middle">remove old (A)</text>
+<rect x="490.66" y="1053" width="52.3" height="20" rx="10" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="516.8" y="1066.42" fill="#73e7ff" font-size="9.5" text-anchor="middle">baseline</text>
+<rect x="548.95" y="1053" width="50.49" height="20" rx="10" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="574.2" y="1066.42" fill="#73e7ff" font-size="9.5" text-anchor="middle">merged</text>
+<rect x="605.44" y="1053" width="54.96" height="20" rx="10" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="632.92" y="1066.42" fill="#73e7ff" font-size="9.5" text-anchor="middle">enforced</text>
+<rect x="725" y="1031" width="150" height="48" rx="10" fill="#0a1124" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.55" />
+<circle cx="744" cy="1049" r="3.5" fill="#80eaff" filter="url(#softGlow)"/>
+<text x="756" y="1053" fill="#cfe9ff" font-size="10.5" font-weight="600" letter-spacing="0.9">CiTool.exe</text>
+<text x="800" y="1070" fill="#64748b" font-size="9.5" text-anchor="middle">{GUID}.cip · unsigned · live</text>
+<circle cx="900" cy="1151" r="5.5" fill="#0a0e1a" stroke="#b660ff" stroke-width="2.5" />
+<line x1="900" y1="1147" x2="900" y2="983" stroke="#b660ff" stroke-width="15" opacity="0.12" stroke-linecap="round"/>
+<line x1="900" y1="1147" x2="900" y2="979" stroke="url(#laneUp)" stroke-width="5" stroke-dasharray="10 7" marker-end="url(#arrUp)"/>
+<text x="940" y="1023" fill="#d7a8ff" font-size="13" font-weight="700" letter-spacing="0.4">EVIDENCE BACK</text>
+<text x="940" y="1041" fill="#8d6ac5" font-size="10.5">checked at every step</text>
+<rect x="940" y="1053" width="38.9" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="959.45" y="1066.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">3076</text>
+<rect x="984.9" y="1053" width="38.9" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="1004.35" y="1066.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">3077</text>
+<rect x="1029.8" y="1053" width="38.9" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="1049.25" y="1066.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">3099</text>
+<rect x="1074.7" y="1053" width="102.55" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="1125.98" y="1066.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">Win32_DeviceGuard</text>
+<rect x="80" y="1151" width="1440" height="501" rx="18" fill="url(#panelGrad)" stroke="#3b82f6" stroke-width="1.5" opacity="0.98"/>
+<g stroke="#6ca1f8" stroke-width="2" opacity="0.7" fill="none"><path d="M80 1179 V1151 H108"/><path d="M1520 1179 V1151 H1492"/><path d="M80 1624 V1652 H108"/><path d="M1520 1624 V1652 H1492"/></g>
+<rect x="110" y="1171" width="269.13" height="32" rx="6" fill="#0a1124" stroke="#3b82f6" stroke-width="1" />
+<circle cx="126" cy="1187" r="4" fill="#3b82f6" filter="url(#softGlow)"/>
+<text x="142" y="1192" fill="#d8e6fd" font-size="13" font-weight="600" letter-spacing="1.2">ROUTE CHOICE + GUARDRAILS</text>
+<text x="395.13" y="1192" fill="#64748b" font-size="12">pick one route before step 3 · what keeps the rebase safe</text>
+<rect x="110" y="1221" width="1380" height="54" rx="10" fill="url(#bannerGrad)" stroke="#b660ff" stroke-width="1.5" filter="url(#softGlow)"/>
+<g transform="translate(132,1232) scale(0.9)" fill="none" stroke="#d7a8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx='6' cy='17' r='4'/><circle cx='28' cy='17' r='4'/><path d='M10 17 H22 M18 13 L22 17 L18 21'/></g>
+<text x="178" y="1245" fill="#e8eef7" font-size="17" font-weight="700">Route A (new GUID) or Route B (keep the GUID)</text>
+<text x="178" y="1265" fill="#a77edf" font-size="12" letter-spacing="0.8">both end the same: one base policy in Audit, rebuilt, then enforced</text>
+<rect x="1277" y="1235" width="98.52" height="26" rx="13" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="1326.26" y="1251.96" fill="#cbd5e1" font-size="11" text-anchor="middle">A recommended</text>
+<rect x="1383.52" y="1235" width="82.24" height="26" rx="13" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="1424.64" y="1251.96" fill="#cbd5e1" font-size="11" text-anchor="middle">B fewer steps</text>
+<g transform="translate(110,1291)">
+<rect x="0" y="0" width="448.67" height="176" rx="12" fill="#0d1426" stroke="#4ade80" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#4ade80" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#4ade80" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><rect x='5' y='4' width='24' height='29' rx='3'/><rect x='12' y='1' width='10' height='6' rx='2'/><path d='M11 19 L15 23 L23 14'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Route A · new GUID</text>
+<text x="46" y="46" fill="#92ebb3" font-size="8.5" letter-spacing="0.6">DOCUMENTED · RECOMMENDED</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">Keep the Wizard&apos;s random GUID</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">Step 5: CiTool -rp the old base + supplementals</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">Step 7: supplementals re-created for the new base</text>
+<text x="14" y="126" fill="#cbd5e1" font-size="10.5">Script 1 writes the new GUID to PolicyGuid.txt</text>
+<rect x="91.33" y="144" width="132.19" height="20" rx="10" fill="#0a1124" stroke="#4ade80" stroke-width="1" stroke-opacity="0.5" />
+<text x="157.43" y="157.42" fill="#9bedb9" font-size="9.5" text-anchor="middle">MS Learn · Remove policies</text>
+<rect x="227.52" y="144" width="129.63" height="20" rx="10" fill="#0a1124" stroke="#4ade80" stroke-width="1" stroke-opacity="0.5" />
+<text x="292.34" y="157.42" fill="#9bedb9" font-size="9.5" text-anchor="middle">MS Learn · Enforce policies</text>
+</g>
+<g transform="translate(575.67,1291)">
+<rect x="0" y="0" width="448.67" height="176" rx="12" fill="#0d1426" stroke="#fb7185" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#fb7185" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#fb7185" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><path d='M5 1 H22 L30 9 V33 H5 Z M22 1 V9 H30 M10 16 H25 M10 21 H25 M10 26 H19'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Route B · keep the GUID</text>
+<text x="46" y="46" fill="#fdaab6" font-size="8.5" letter-spacing="0.6">FEWER STEPS · NOT DOCUMENTED</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">Step 3: old GUID into the new XML (XML edit)</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">Script 1 picks a HIGHER version: in-place swap</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">Supplementals keep working, PolicyGuid.txt unchanged</text>
+<text x="14" y="126" fill="#cbd5e1" font-size="10.5">Tested: compiles in PS 7 and 5.1</text>
+<rect x="139.33" y="144" width="55.05" height="20" rx="10" fill="#0a1124" stroke="#fb7185" stroke-width="1" stroke-opacity="0.5" />
+<text x="166.86" y="157.42" fill="#fdb1bc" font-size="9.5" text-anchor="middle">XML edit</text>
+<rect x="198.38" y="144" width="111.1" height="20" rx="10" fill="#0a1124" stroke="#fb7185" stroke-width="1" stroke-opacity="0.5" />
+<text x="253.93" y="157.42" fill="#fdb1bc" font-size="9.5" text-anchor="middle">no supplemental work</text>
+</g>
+<g transform="translate(1041.33,1291)">
+<rect x="0" y="0" width="448.67" height="176" rx="12" fill="#0d1426" stroke="#b660ff" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#b660ff" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#b660ff" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><rect x='12' y='1' width='10' height='8' rx='1.5'/><rect x='1' y='25' width='10' height='8' rx='1.5'/><rect x='23' y='25' width='10' height='8' rx='1.5'/><path d='M17 9 V17 M6 25 V17 H28 V25'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Leave GPO scope</text>
+<text x="46" y="46" fill="#d3a0ff" font-size="8.5" letter-spacing="0.6">STEP 1 · GPO README §10.3</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">Move the computer object out of the WDAC OU</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">gpupdate removes the task; the .cip stays</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">Don&apos;t disable the GPOs: other devices use them</text>
+<rect x="150.83" y="144" width="84.98" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="193.32" y="157.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">Move-ADObject</text>
+<rect x="239.81" y="144" width="58.38" height="20" rx="10" fill="#0a1124" stroke="#b660ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="269" y="157.42" fill="#d7a8ff" font-size="9.5" text-anchor="middle">gpupdate</text>
+</g>
+<g transform="translate(110,1484)">
+<rect x="0" y="0" width="448.67" height="158" rx="12" fill="#0d1426" stroke="#fbbf24" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#fbbf24" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#fbbf24" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><path d='M17 1 L32 7 V19 C32 27 25 32 17 33 C9 32 2 27 2 19 V7 Z'/><path d='M10 17 L15 22 L24 12'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Two boxes unchecked</text>
+<text x="46" y="46" fill="#fdd97c" font-size="8.5" letter-spacing="0.6">§1.3 · THE TRADE-OFF</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">User mode: Microsoft-signed bypass tools now allowed</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">e.g. msbuild, mshta, wmic, wsl; -AllowWSL not needed</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">Kernel mode: Windows&apos; own driver blocklist still on</text>
+<rect x="163.83" y="126" width="120.98" height="20" rx="10" fill="#0a1124" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.5" />
+<text x="224.32" y="139.42" fill="#fddc87" font-size="9.5" text-anchor="middle">check the driver blocklist</text>
+</g>
+<g transform="translate(575.67,1484)">
+<rect x="0" y="0" width="448.67" height="158" rx="12" fill="#0d1426" stroke="#00d4ff" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#00d4ff" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#00d4ff" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><rect x='1' y='3' width='32' height='22' rx='2'/><path d='M17 25 V31 M10 31 H24'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Read the mode first</text>
+<text x="46" y="46" fill="#66e5ff" font-size="8.5" letter-spacing="0.6">§1.2 · BEFORE YOU START</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">User mode (V-243451) gives the mode: 1 = AUDIT</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">Kernel mode often reads 2 from built-in policies</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">CiTool IsEnforced = True means active, not enforce</text>
+<rect x="163.83" y="126" width="121.27" height="20" rx="10" fill="#0a1124" stroke="#00d4ff" stroke-width="1" stroke-opacity="0.5" />
+<text x="224.47" y="139.42" fill="#73e7ff" font-size="9.5" text-anchor="middle">7_DISA_STIG_CHECK.ps1</text>
+</g>
+<g transform="translate(1041.33,1484)">
+<rect x="0" y="0" width="448.67" height="158" rx="12" fill="#0d1426" stroke="#fb7185" stroke-width="1.4" />
+<rect x="0" y="0" width="448.67" height="5" rx="2.5" fill="#fb7185" filter="url(#softGlow)"/>
+<g transform="translate(14,16) scale(0.65)" fill="none" stroke="#fb7185" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><path d='M11 6 L4 13 L11 20 M4 13 H21 A9 9 0 0 1 21 31 H14'/></g>
+<text x="46" y="30" fill="#e8eef7" font-size="14" font-weight="700">Roll back</text>
+<text x="46" y="46" fill="#fdaab6" font-size="8.5" letter-spacing="0.6">§5</text>
+<text x="14" y="72" fill="#cbd5e1" font-size="10.5">Fastest: restore the Step 0 checkpoint</text>
+<text x="14" y="90" fill="#cbd5e1" font-size="10.5">Enforced, need Audit: README §11 Option A</text>
+<text x="14" y="108" fill="#cbd5e1" font-size="10.5">Back to GPO: A removes the new base; B needs a higher package</text>
+<rect x="142.33" y="126" width="63.6" height="20" rx="10" fill="#0a1124" stroke="#fb7185" stroke-width="1" stroke-opacity="0.5" />
+<text x="174.13" y="139.42" fill="#fdb1bc" font-size="9.5" text-anchor="middle">checkpoint</text>
+<rect x="209.93" y="126" width="55.43" height="20" rx="10" fill="#0a1124" stroke="#fb7185" stroke-width="1" stroke-opacity="0.5" />
+<text x="237.65" y="139.42" fill="#fdb1bc" font-size="9.5" text-anchor="middle">Option A</text>
+<rect x="269.36" y="126" width="36.91" height="20" rx="10" fill="#0a1124" stroke="#fb7185" stroke-width="1" stroke-opacity="0.5" />
+<text x="287.82" y="139.42" fill="#fdb1bc" font-size="9.5" text-anchor="middle">GPO</text>
+</g>
+<text x="60" y="1692" fill="#94a3b8" font-size="11" letter-spacing="2">LEGEND</text>
+<rect x="60" y="1704" width="14" height="14" rx="3" fill="#00d4ff" />
+<text x="82" y="1715" fill="#cbd5e1" font-size="12">Prepare</text>
+<rect x="162.68" y="1704" width="14" height="14" rx="3" fill="#fbbf24" />
+<text x="184.68" y="1715" fill="#cbd5e1" font-size="12">Swap (audit)</text>
+<rect x="290.2" y="1704" width="14" height="14" rx="3" fill="#4ade80" />
+<text x="312.2" y="1715" fill="#cbd5e1" font-size="12">Rebuild + enforce</text>
+<circle cx="453.16" cy="1711" r="5" fill="#b660ff" />
+<text x="468.16" y="1715" fill="#cbd5e1" font-size="12">Wizard / GPO / policy files</text>
+<circle cx="652.8" cy="1711" r="5" fill="#4ade80" />
+<text x="667.8" y="1715" fill="#cbd5e1" font-size="12">Route A (documented)</text>
+<circle cx="834.2" cy="1711" r="5" fill="#fb7185" />
+<text x="849.2" y="1715" fill="#cbd5e1" font-size="12">Route B (undocumented) / rollback</text>
+<circle cx="1081" cy="1711" r="5" fill="#00d4ff" />
+<text x="1096" y="1715" fill="#cbd5e1" font-size="12">Policy to the device (down)</text>
+<circle cx="1284.96" cy="1711" r="5" fill="#b660ff" />
+<text x="1299.96" y="1715" fill="#cbd5e1" font-size="12">Evidence back (up)</text>
+<text x="1550" y="1752" fill="#475569" font-size="10" letter-spacing="1.5" text-anchor="end">C:\WDAC\config · app control for business · policy rebase · 2026</text>
+</svg>
