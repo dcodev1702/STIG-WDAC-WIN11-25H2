@@ -69,12 +69,15 @@
 
 | Where | Requirement |
 |---|---|
-| **Reference device** | Finished `C:\WDAC\config\README.md`: `C:\WDAC\Source\Base-Enforce.xml` + `PolicyGuid.txt`, the enforced policy active, STIG `2 / 2`. For a later round the device may stay in Audit, with `Base-Enforce.xml` prepared by `6_enforce_policy.ps1 -PrepareOnly` (§10.1). Windows 11 Enterprise 22H2+ with **RSAT Group Policy + AD** (`Get-WindowsCapability -Online -Name Rsat.GroupPolicy*, Rsat.ActiveDirectory* \| Add-WindowsCapability -Online`) and ConfigCI (inbox). |
+| **Reference device** | Finished `C:\WDAC\config\README.md`: `C:\WDAC\Source\Base-Enforce.xml` + `PolicyGuid.txt`, the enforced policy active, STIG `2 / 2`. For a later round the device may stay in Audit, with `Base-Enforce.xml` prepared by `6_enforce_policy.ps1 -PrepareOnly` (§10.1). Windows 11 Enterprise 22H2+ with **RSAT Group Policy + AD** (`dism.exe /Online /Add-Capability /CapabilityName:Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0 /CapabilityName:Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0`; list with `dism.exe /Online /Get-Capabilities`) and ConfigCI (inbox). |
 | **Rights** | **Domain Admins**, or **Group Policy Creator Owners** plus *Link GPOs* permission on the target OU |
 | **Endpoints** | Windows 11 Enterprise **22H2 or later** (`CiTool.exe`), domain-joined, **in the target OU**. Read access to SYSVOL is the default. WinRM only for remote validation. |
 | **Scope** | Windows client editions only. The endpoint script **skips** servers and domain controllers (`ProductType ≠ 1`). |
 | **Managed installer** | Option 13 is ON in the policy. Designate MECM as the managed installer with `CCMSetup.exe MANAGEDINSTALLER=1`; see `C:\WDAC\config\README.md` §2. The GPOs don't configure AppLocker. |
 | **Scripts** | Copy `C:\WDAC\GPO\` to the reference device. If blocked: `Get-ChildItem C:\WDAC\GPO -Recurse \| Unblock-File`. Run every script **elevated**, in PowerShell 7 **or** Windows PowerShell 5.1. |
+
+> [!IMPORTANT]
+> **Produce the policies first.** Run the [Application Control for Business Wizard](https://webapp-wdac-wizard.azurewebsites.net/) to create the base policy (and any supplemental policies), then finish `C:\WDAC\config\README.md` on the reference device. Nothing in this folder can be built or published until `Base-Enforce.xml` and `PolicyGuid.txt` exist. Step 0 prints this reminder and fails when those files are missing.
 
 > [!WARNING]
 > Keep target computers out of the scope of any GPO that uses the legacy *Deploy App Control for Business* (`SiPolicy.p7b`) setting. A legacy single policy and this multiple-policy base policy would both be active, and they **intersect**: files would need to pass both.
@@ -147,6 +150,9 @@ Set-Location C:\WDAC\GPO\scripts
 ---
 
 ## 5. Phase 1 — Pre-Flight (Step 0)
+
+> [!IMPORTANT]
+> Before running Step 0, produce the required policies with the [Application Control for Business Wizard](https://webapp-wdac-wizard.azurewebsites.net/). The script reminds you and links the Wizard, and its *Reference policy files* check fails until the policies exist.
 
 ```powershell
 .\0_GPO_pre-flight.ps1                          # optional: -TargetOU 'OU=...,DC=...'

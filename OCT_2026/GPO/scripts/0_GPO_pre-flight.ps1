@@ -5,6 +5,13 @@ param([string]$TargetOU)
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
 $Cfg = Initialize-WdacGpo -ScriptName '0_GPO_pre-flight' -Overrides @{ TargetOU = $TargetOU }
 $R = New-WdacResults
+$WizardUrl = 'https://webapp-wdac-wizard.azurewebsites.net/'
+Write-Host ''
+Write-Host 'BEFORE YOU PROCEED: the required policies must already exist.' -ForegroundColor Yellow
+Write-Host '  Run the Application Control for Business Wizard to produce them (base policy, then any supplemental policies),' -ForegroundColor Yellow
+Write-Host '  then finish C:\WDAC\config\README.md on the reference device. Step 1 packages Base-Enforce.xml + PolicyGuid.txt.' -ForegroundColor Yellow
+Write-Host "  Wizard: $WizardUrl" -ForegroundColor Cyan
+Write-Host ''
 try {
     # ---------------------------------------------------------------- session and tools
     Add-WdacResult $R 'OK' 'Session' "Elevated as $([Security.Principal.WindowsIdentity]::GetCurrent().Name) on $env:COMPUTERNAME (PowerShell $($PSVersionTable.PSVersion) $($PSVersionTable.PSEdition))"
@@ -12,7 +19,7 @@ try {
     if ($CS.PartOfDomain) { Add-WdacResult $R 'OK' 'Domain membership' $CS.Domain } else { Add-WdacResult $R 'FAIL' 'Domain membership' 'This computer is not domain joined' }
     foreach ($M in 'GroupPolicy', 'ActiveDirectory', 'ConfigCI') {
         try { Import-WdacModule $M; Add-WdacResult $R 'OK' "Module $M" 'loaded' }
-        catch { Add-WdacResult $R 'FAIL' "Module $M" "$($_.Exception.Message) - install RSAT: Get-WindowsCapability -Online -Name Rsat.GroupPolicy*, Rsat.ActiveDirectory* | Add-WindowsCapability -Online" }
+        catch { Add-WdacResult $R 'FAIL' "Module $M" "$($_.Exception.Message) - install RSAT (elevated): dism.exe /Online /Add-Capability /CapabilityName:Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0 /CapabilityName:Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0" }
     }
     $Groups = @(whoami /groups /fo csv | ConvertFrom-Csv | ForEach-Object { $_.'Group Name' })
     $Rights = @($Groups | Where-Object { $_ -match '\\(Domain Admins|Enterprise Admins|Group Policy Creator Owners)$' })
@@ -49,7 +56,7 @@ try {
     # ---------------------------------------------------------------- reference policy (built with C:\WDAC\config\README.md)
     $GuidFile = Join-Path $Cfg.WdacRoot 'Source\PolicyGuid.txt'
     $EnforceXml = Join-Path $Cfg.WdacRoot 'Source\Base-Enforce.xml'
-    if (-not (Test-Path -LiteralPath $GuidFile) -or -not (Test-Path -LiteralPath $EnforceXml)) { Add-WdacResult $R 'FAIL' 'Reference policy files' "Missing $GuidFile or $EnforceXml - finish C:\WDAC\config\README.md on this device first" }
+    if (-not (Test-Path -LiteralPath $GuidFile) -or -not (Test-Path -LiteralPath $EnforceXml)) { Add-WdacResult $R 'FAIL' 'Reference policy files' "Missing $GuidFile or $EnforceXml - run the Application Control for Business Wizard ($WizardUrl) to produce the policies, then finish C:\WDAC\config\README.md on this device first" }
     else {
         $Guid = (Get-Content -LiteralPath $GuidFile -Raw).Trim()
         $Doc = New-Object System.Xml.XmlDocument; $Doc.Load($EnforceXml)

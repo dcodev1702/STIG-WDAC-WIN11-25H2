@@ -54,6 +54,7 @@ try {
         # ------------------------------------------------------------ startup script + scheduled task definitions
         $Ini = Join-Path $Paths.SysvolPdc 'Machine\Scripts\scripts.ini'
         $IniText = if (Test-Path -LiteralPath $Ini) { [IO.File]::ReadAllText($Ini) } else { '' }
+        # The detail shows the raw scripts.ini line, so it starts with the entry index ("0Parameters=...")
         $IniOk = ($IniText -match '\[Startup\]' -and $IniText -match 'powershell\.exe' -and $IniText -match [regex]::Escape("$($Paths.Id)\$($Paths.PayloadRel)\Deploy-WDACPolicy.ps1") -and $IniText -match "-Mode $Mode" -and $IniText -match '-NoConfirm')
         Add-WdacResult $R $(if ($IniOk) { 'OK' } else { 'FAIL' }) "$Mode startup script" $(if ($IniOk) { (($IniText -split "`r?`n") | Where-Object { $_ -match 'Parameters=' }) -join '' } else { "scripts.ini missing or wrong ($Ini) - it must run Deploy-WDACPolicy.ps1 -Mode $Mode -NoConfirm; re-run 2_GPO_create_gpos.ps1" })
         $TaskFile = Join-Path $Paths.SysvolPdc 'Machine\Preferences\ScheduledTasks\ScheduledTasks.xml'
