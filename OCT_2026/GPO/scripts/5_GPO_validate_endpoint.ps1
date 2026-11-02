@@ -4,7 +4,7 @@
 #   .\5_GPO_validate_endpoint.ps1 -ExpectedMode Enforce            # no GroupPolicy module needed
 # Checks: computer in the OU, which WDAC GPO applied, scheduled task, deployment log/events/state, CiTool version = the GPO's
 # package, .cip on disk, Event 3099, Win32_DeviceGuard (0 = OFF, 1 = AUDIT, 2 = ENFORCING; Audit: UMCI 1 / Enforce: 2 / 2 = STIG
-# PASS), 3076/3077 counts.
+# PASS), 3076/3077 counts, and the folders of the package's FilePath rules on the endpoint (admin-only, or the rule is ignored).
 param(
     [string[]]$ComputerName = @($env:COMPUTERNAME),
     [ValidateSet('Audit', 'Enforce')][string]$ExpectedMode,
@@ -21,7 +21,7 @@ $R = New-WdacResults
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = Resolve-WdacTargetOU $Cfg $Domain
     if (-not $ExpectedMode) {
         $On = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | Where-Object { $_.Enabled -and $_.DisplayName -in $Cfg.AuditGpoName, $Cfg.EnforceGpoName })
         if ($On.Count -ne 1) { throw "STOP: expected exactly one enabled WDAC GPO link on $OU, found $($On.Count). Pass -ExpectedMode or fix the links with 3_GPO_set_mode.ps1." }
@@ -97,6 +97,14 @@ try {
         if ($X.OtherBases) { Add-WdacResult $R 'WARN' "$C other base policies" ($X.OtherBases -join '; ') }
         if ($X.Supplementals) { Add-WdacResult $R 'OK' "$C supplementals" ($X.Supplementals -join '; ') }
         foreach ($Line in @($X.LogTail | Select-Object -Last 3)) { Add-WdacResult $R 'OK' "$C deploy log" $Line }
+        # Runtime FilePath rule protection on this endpoint: the rule folders listed in the published manifest must be admin-only
+        if ($Man.PSObject.Properties.Name -notcontains 'FilePathRules') { Add-WdacResult $R 'WARN' "$C FilePath folders" 'the published manifest has no FilePathRules (built before this check) - rebuild and publish with 1_GPO_build_packages.ps1 and 2_GPO_create_gpos.ps1 to check them' }
+        else {
+            $Rules = [string[]]@($Man.FilePathRules)
+            $Folders = if ($Computer -eq $env:COMPUTERNAME -or $Computer -eq 'localhost') { & $WdacFilePathFolderCheck $Rules }
+                       else { Invoke-Command -ComputerName $Computer -ScriptBlock $WdacFilePathFolderCheck -ArgumentList (, $Rules) -ErrorAction Stop }
+            Add-WdacFolderCheckResults $R $Folders $C
+        }
     }
 }
 catch { Add-WdacResult $R 'FAIL' 'Unexpected error' $_.Exception.Message }

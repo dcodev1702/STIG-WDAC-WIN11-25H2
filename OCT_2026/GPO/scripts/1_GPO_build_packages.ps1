@@ -4,7 +4,8 @@
 #   Enforce\ = the same rules, Audit Mode OFF,       version YYYY.MM.DD.N+1   (higher, so Audit -> Enforce replaces in place)
 # Versions use today's (local) date with a daily counter, and are always above every version already known for the policy
 # (WDAC-Version.ps1), including the packages already published in both GPOs.
-# Each folder gets {PolicyGUID}.cip, manifest.json (GUID, version, SHA-256, mode) and Deploy-WDACPolicy.ps1.
+# Each folder gets {PolicyGUID}.cip, manifest.json (GUID, version, SHA-256, mode, FilePath rules) and Deploy-WDACPolicy.ps1.
+# Portability gate: the packages can serve any OU and domain (enclave), so a rule that names a user profile stops the build.
 # Nothing is deployed and no GPO is touched.
 param(
     [string]$EnforceXml,
@@ -73,6 +74,11 @@ try {
     }
     $Counts = $D.Enforce.SiPolicy
     Add-WdacResult $R 'OK' 'Rule counts' "signers $(@($Counts.Signers.Signer | Where-Object { $_ }).Count), allow $(@($Counts.FileRules.Allow | Where-Object { $_ }).Count), deny $(@($Counts.FileRules.Deny | Where-Object { $_ }).Count), fileattrib $(@($Counts.FileRules.FileAttrib | Where-Object { $_ }).Count)"
+    # Portability: the base policy and every supplemental shipped with it must not name a user profile (WDAC-GPO-Common.ps1)
+    foreach ($PX in @($EnforceXml) + @($SupplementalXml)) {
+        if (-not (Test-Path -LiteralPath $PX)) { Add-WdacResult $R 'FAIL' 'Supplemental XML' "$PX not found"; continue }
+        foreach ($F in (Get-WdacPortabilityFindings $PX)) { Add-WdacResult $R $F.Status $F.Check $F.Detail }
+    }
     if (@($R | Where-Object { $_.Status -eq 'FAIL' }).Count) { throw 'STOP: the package gate failed (see the table above). Nothing was compiled.' }
 
     # ---------------------------------------------------------------- optional supplementals (shipped unchanged)
@@ -100,6 +106,8 @@ try {
             Mode = $Mode; BuiltAt = (Get-Date).ToString('o'); BuiltOn = $env:COMPUTERNAME; BuiltBy = [Security.Principal.WindowsIdentity]::GetCurrent().Name
             SourceXml = $EnforceXml; SourceXmlSha256 = $SrcHash; DeployScriptSha256 = (Get-FileHash -LiteralPath (Join-Path $Out 'Deploy-WDACPolicy.ps1') -Algorithm SHA256).Hash
             Policies = $Policies
+            # Read by 5_GPO_validate_endpoint.ps1: runtime FilePath rule protection needs these folders admin-only on every device
+            FilePathRules = (Get-WdacFilePathRules $Xml[$Mode])
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Out 'manifest.json') -Encoding UTF8
         foreach ($P in $Policies) { Add-WdacResult $R 'OK' "$Mode package" "$($P.Type) $($P.Name) v$($P.Version) - $($P.File) $($P.Bytes) bytes SHA-256 $($P.Sha256)" }
     }

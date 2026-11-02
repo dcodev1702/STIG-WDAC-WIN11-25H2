@@ -13,6 +13,7 @@
 1. [Overview](#1-overview)
 2. [Prerequisites](#2-prerequisites)
 3. [Settings](#3-settings)
+   - [3.1 One Policy Kit, Several Enclaves (Domains and OUs)](#31-one-policy-kit-several-enclaves-domains-and-ous)
 4. [Scripts at a Glance — Run Order](#4-scripts-at-a-glance--run-order)
 5. [Phase 1 — Pre-Flight (Step 0)](#5-phase-1--pre-flight-step-0)
 6. [Phase 2 — Build the Packages (Step 1)](#6-phase-2--build-the-packages-step-1)
@@ -90,7 +91,7 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once. Any script parameter with
 
 | Setting | Proven value | Meaning |
 |---|---|---|
-| `TargetOU` | `''` | Distinguished name of the target OU. **Empty = the OU of the computer running the scripts.** |
+| `TargetOU` | `''` | Distinguished name of the target OU. **Empty = the OU of the computer running the scripts.** It must be an OU of the domain the scripts run in; one from another domain stops every step with nothing changed. |
 | `AuditGpoName` | `JMSC-WDAC-PAWS - AppControl Audit` | Audit GPO name |
 | `EnforceGpoName` | `JMSC-WDAC-PAWS - AppControl Enforce` | Enforce GPO name |
 | `PolicyNamePrefix` | `PAW-WDAC-GPO` | Friendly name stamped into the packages, e.g. `PAW-WDAC-GPO-Enforce` in CiTool and Event 3099 |
@@ -100,6 +101,61 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once. Any script parameter with
 
 > [!IMPORTANT]
 > If the reference device is **not** in the target OU, set `TargetOU` explicitly. Otherwise the GPOs are linked to the reference device's own OU.
+
+### 3.1 One Policy Kit, Several Enclaves (Domains and OUs)
+
+The policy holds rules, options and one GUID. It names no domain, OU, computer or user. One known-good policy therefore serves every enclave whose PAWs come from the same image. Each enclave builds and publishes its **own** packages from the **same** kit, in its own domain, with these scripts. No per-enclave policy and no signing step are needed (the policy is unsigned).
+
+**The kit** is [`policy/`](policy/). Copy all five files into `C:\WDAC\Source` on the enclave's reference device:
+
+| File | What it is |
+|---|---|
+| `Base-Enforce.xml` | The enforced known-good base policy. Step 1 builds both packages (Audit and Enforce) from it. |
+| `Base-Audit-Merged.xml` | The same rules with Audit Mode ON, for a later audit round with the config guide (§11 Option D there) |
+| `Base-Audit.xml` | The Wizard baseline (Allow Microsoft and both block lists, no application rules), for a first audit round with the config guide |
+| `PolicyGuid.txt` | The policy GUID. It is the same in every enclave, so each enclave's packages replace the policy in place. |
+| `SHA256SUMS.txt` | SHA-256 of the four files. Check them after every transfer (below). |
+
+**In each enclave:**
+
+1. On a reference device in that enclave (a domain-joined PAW from the same image, with RSAT), copy this `scripts` folder to `C:\WDAC\GPO\scripts` and the kit to `C:\WDAC\Source`, then check the hashes:
+
+   ```powershell
+   Get-Content C:\WDAC\Source\SHA256SUMS.txt | ForEach-Object {
+       $Hash, $File = $_ -split '\s+', 2
+       '{0}  {1}' -f $(if ((Get-FileHash -LiteralPath "C:\WDAC\Source\$File").Hash -eq $Hash) { 'OK  ' } else { 'FAIL' }), $File
+   }
+   ```
+
+2. Edit `GPO-Settings.psd1` for that enclave. Set `TargetOU` to the enclave's PAW OU, or leave it empty when the reference device sits in that OU. Change the GPO names only if you name GPOs per enclave. Nothing else is domain-specific: the scripts read the domain, its PDC emulator and SYSVOL from Active Directory at run time.
+3. Run the normal order (§4): `0` → `1` → `2` → `4` → `3 -Mode Audit` → `5` → audit period → `3 -Mode Enforce` → `5`.
+
+**Guards that keep it portable:**
+
+| Guard | Steps | What it stops |
+|---|---|---|
+| OU in this domain | 0, 2 – 6 | A `TargetOU` from another domain, such as a settings file copied between enclaves: *"STOP: target OU … is not in domain …"*, with nothing changed. |
+| Portability gate | 0, 1 | A FilePath rule under a named user profile (`C:\Users\<name>\…`) in `Base-Enforce.xml` or a `-SupplementalXml`: **FAIL**, nothing compiled. Such a rule allows files for one user only. It carries that user's name, and the domain in `<user>.<DOMAIN>` profile folders, into every enclave. Runtime FilePath rule protection ignores user-writable folders anyway. The FAIL row prints the `Remove-CIPolicyRule` command that removes it. A user profile that appears only in rule text, such as a FriendlyName, is a **WARN**. |
+| FilePath rule folders | 0 (reference device), 5 (each endpoint) | A FilePath rule folder that standard users can write to, or that doesn't exist: **WARN**. Windows ignores that rule, so the files in that folder are **blocked** under Enforce. Fix the folder's ACL in the image. |
+
+Some things differ per enclave by design. Each enclave's step 1 picks the next date-based version pair above what *that* enclave knows. `manifest.json` (`BuiltBy`, `BuiltOn`) and the scheduled task's author record whoever ran the build there. The rules are identical everywhere: `SourceXmlSha256` in every `manifest.json` equals the kit's `Base-Enforce.xml` hash. Built on the same day, the `.cip` files are byte-identical across enclaves.
+
+> [!WARNING]
+> **`%OSDRIVE%\ADMIN\*`:** on the lab image, `C:\ADMIN` inherits *Authenticated Users: Modify* from `C:\`. Runtime FilePath rule protection therefore ignores this rule, and step 0 reports it. In the image, either remove that write access, for example `icacls C:\ADMIN /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"` (Administrators and SYSTEM full control, Users read and execute), or allow the files in `C:\ADMIN` by publisher or hash and drop the rule.
+
+**Prove it** with [`tests/Test-WdacGpoPortability.ps1`](tests/Test-WdacGpoPortability.ps1) (elevated, Windows PowerShell 5.1 or PowerShell 7). It checks the kit and the new guards. It then runs the real steps 0, 1, 2, 4 and 3, plus step 5's FilePath rows, unchanged in two simulated domains with different names and OUs. In-memory stand-ins replace every Active Directory and Group Policy command, and the test refuses to start unless each one resolves to its stand-in. Each simulated SYSVOL is a folder reached through the `\\localhost\C$` share. The real GPOs, links and active policies are compared before and after. **It changes nothing.**
+
+```powershell
+.\tests\Test-WdacGpoPortability.ps1          # kit = .\policy; results: %TEMP%\WDAC-GPO-Portability-<stamp>\Test-WdacGpoPortability.csv
+```
+
+**Proven** on 2026-11-02 in both editions: 99 checks, 0 FAIL.
+
+- `enclave2.example` (`OU=PAW Workstations`) and `ops.enclave3.mil` (`OU=Tier0,OU=PAWs,OU=Admin`): step 0 PASSED. Step 1 built Audit `2026.11.2.3` / Enforce `2026.11.2.4` from the kit. Step 2 wrote startup scripts and tasks for `\\<that domain>\SysVol\<that domain>\…` and linked the GPOs to that domain's OU only. Steps 4 and 3 then went Audit → Enforce and PASSED.
+- Both enclaves produced byte-identical `.cip` files (Audit `AFF66DE1…`, Enforce `9EBE6C99…`).
+- Refused with nothing changed: the other enclave's OU, a publish without confirmation, and a policy with a user-profile rule.
+- The lab domain's real GPOs, links and active policies were identical before and after.
+- Separately, steps 0 and 1 ran for real in the lab domain (packages to a scratch folder, no GPO touched). They built the same `.cip` hashes, and step 1 refused the pre-cleanup lab policy at the portability gate.
 
 ---
 
@@ -163,9 +219,11 @@ Set-Location C:\WDAC\GPO\scripts
 | Session, domain membership, GroupPolicy / ActiveDirectory / ConfigCI modules | OK |
 | Rights | `Domain Admins` (or `Group Policy Creator Owners`) |
 | Domain, PDC emulator, **SYSVOL on every DC** | reachable |
-| Target OU and **every member**, with OS | Windows client editions. Anything else is WARN; the endpoint script skips it. |
+| Target OU (**must be in this domain**, §3.1) and **every member**, with OS | Windows client editions. Anything else is WARN; the endpoint script skips it. |
 | GPOs already linked to the OU; whether the two GPOs exist | "will create" or "will UPDATE" |
 | `Base-Enforce.xml`: GUID = `PolicyGuid.txt`, base policy, **Audit Mode OFF**, Option 13 | OK |
+| `Base-Enforce.xml` portability: no FilePath rule names a user profile (§3.1) | OK. FAIL prints the `Remove-CIPolicyRule` fix. |
+| FilePath rule folders on this device, which uses the same image as the endpoints | `N of N rule folder(s) admin-only`. A folder that is missing or user-writable is a WARN. |
 | Reference device: that policy **active at the same version**, STIG | `2 / 2`. Expect two WARNs (active version differs, STIG `2 / 1`) when the device stays in Audit for a later round. |
 | Local supplemental policies | listed as *NOT packaged* unless you pass them to step 1 |
 | `CiTool.exe` / build | build ≥ 22621 |
@@ -188,8 +246,9 @@ If the reference device sits in the target OU and runs a GPO-deployed version, t
 3. **Gate.** This runs before anything compiles:
    - both copies have the same GUID and are base policies;
    - the options differ **only** by `Enabled:Audit Mode`;
-   - `<EKUs>`, `<FileRules>`, `<Signers>`, `<SigningScenarios>`, `<UpdatePolicySigners>` and `<CiSigners>` are **byte-identical**.
-4. **Output.** Compiled into `C:\WDAC\GPO\Packages\<stamp>\{Audit,Enforce}\`, each with `{GUID}.cip`, `manifest.json` (GUID, version, SHA-256, mode, source XML hash) and a copy of `Deploy-WDACPolicy.ps1`. `Packages\latest.txt` points to the new folder. `Packages\<stamp>\xml\` (never published) keeps the exact XML behind each `.cip`, named with its version (`<prefix>-Audit_v<N>.xml`, `<prefix>-Enforce_v<N+1>.xml`), plus `source_Base-Enforce_v<version>.xml`, so every package can be traced and rebuilt.
+   - `<EKUs>`, `<FileRules>`, `<Signers>`, `<SigningScenarios>`, `<UpdatePolicySigners>` and `<CiSigners>` are **byte-identical**;
+   - **portability**: no FilePath rule in `Base-Enforce.xml` or in any `-SupplementalXml` names a user profile (§3.1).
+4. **Output.** Compiled into `C:\WDAC\GPO\Packages\<stamp>\{Audit,Enforce}\`, each with `{GUID}.cip`, `manifest.json` (GUID, version, SHA-256, mode, source XML hash, and the FilePath rules that step 5 checks on the endpoints) and a copy of `Deploy-WDACPolicy.ps1`. `Packages\latest.txt` points to the new folder. `Packages\<stamp>\xml\` (never published) keeps the exact XML behind each `.cip`, named with its version (`<prefix>-Audit_v<N>.xml`, `<prefix>-Enforce_v<N+1>.xml`), plus `source_Base-Enforce_v<version>.xml`, so every package can be traced and rebuilt.
 
 **Proven output** (test build with date-based versions, after the proving ground had published `2026.10.21.4` / `.5`):
 
@@ -269,6 +328,7 @@ Endpoints pick this up at their next background refresh (90 ± 30 minutes) or at
 | Event 3099 | *"Refreshed and activated … <prefix>-Audit. id GPO-AUDIT-<version>. Status 0x0"* |
 | `Win32_DeviceGuard` (`0` OFF · `1` AUDIT · `2` ENFORCING) | **V-243451 user `1 (AUDIT)`**, an open finding until Enforce. V-243450 kernel reads `1 (AUDIT)`, or `2 (ENFORCING)` if platform policies already enforce kernel mode. |
 | 3076 / 3077 since deployment | reported |
+| FilePath rule folders listed in the published `manifest.json`, checked on the endpoint | admin-only. A folder that is missing or user-writable is a WARN: Windows ignores that rule, so the files there are blocked under Enforce (§3.1). |
 
 ### 8.3 The Audit Period
 
@@ -419,6 +479,10 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | Deploy log **3006** *NOT deployed - cannot answer the Y/N confirmation* | `Deploy-WDACPolicy.ps1` started without `-NoConfirm` by something other than the GPO | Pass `-NoConfirm`, or let the GPO run it |
 | Step 4 **FAIL** *version AD/SYSVOL* differ | Replication in progress, or a manual SYSVOL edit | Wait for replication; re-run `2_GPO_create_gpos.ps1` |
 | Unexpected **3077** under Enforce | An app was missing from the reference policy | Fix on the reference device → `1_` → `2_` (§10.1), or demote (§10.2) |
+| Any step: **STOP** *"target OU … is not in domain …"* | `TargetOU` belongs to another domain, for example a settings file copied from another enclave | Set `TargetOU` to an OU of this domain, or leave it empty when the reference device is in the target OU (§3.1) |
+| Steps 0 / 1: **FAIL** *user-profile rules* | A FilePath rule names `C:\Users\<name>`: it works for one user only and carries that name into every enclave | On the reference device, run the `Remove-CIPolicyRule` command the row prints (or remove the rule in the Wizard), then run the step again |
+| Steps 0 / 5: **WARN** *FilePath folder … is writable by …* | Standard users can write to a FilePath rule's folder, so Windows ignores the rule | Remove that write access in the image (§3.1), or allow those files by publisher or hash |
+| Step 5: **WARN** *manifest has no FilePathRules* | The published package was built before this check | Build and publish a new pair: `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` |
 
 ---
 
@@ -436,6 +500,7 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | `6_GPO_rollback.ps1` | **`-Action DisableLinks\|RemovePolicy\|RemoveGpos`** · `-ComputerName` · `-Force` · `-NoConfirm` · `-WhatIf` |
 | `Deploy-WDACPolicy.ps1` *(endpoint, run by the GPO)* | `-Mode Audit\|Enforce` · `-PayloadPath` (its own folder) · `-NoConfirm` (always passed by the GPO) |
 | `WDAC-Confirm.ps1` *(helper, dot-sourced)* | `Confirm-WdacChange`: the yellow Y/N prompt used by steps 2, 3 and 6. Identical to `C:\WDAC\config\scripts\WDAC-Confirm.ps1`. |
+| `tests\Test-WdacGpoPortability.ps1` *(test, changes nothing)* | `-KitPath` (`..\policy`) · `-ScriptsPath` (`..\scripts`) · `-WorkRoot` (`%TEMP%\WDAC-GPO-Portability-<stamp>`). See §3.1. |
 
 ## Appendix B — What the GPOs Contain
 
@@ -446,7 +511,7 @@ Use this on one device in the target OU (ideally the reference device) before yo
   Machine\Scripts\scripts.ini                    [Startup] 0CmdLine=powershell.exe / 0Parameters=... -Mode <Mode> -NoConfirm   (UTF-16 LE)
   Machine\Scripts\Startup\WDAC\
       {POLICY-GUID}.cip                          compiled policy (Audit: version N, Enforce: N+1)
-      manifest.json                              Mode, Policies[] {Type, PolicyGuid, Version, Name, File, Sha256}, source XML hash, deploy-script hash
+      manifest.json                              Mode, Policies[] {Type, PolicyGuid, Version, Name, File, Sha256}, source XML hash, deploy-script hash, FilePathRules[]
       Deploy-WDACPolicy.ps1                      endpoint script
   Machine\Preferences\ScheduledTasks\ScheduledTasks.xml   TaskV2 WDAC-GPO-Deploy-<Mode> (Replace, removePolicy=1, SYSTEM)
 AD: CN={GPO-GUID},CN=Policies,CN=System,<domain DN>

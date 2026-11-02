@@ -1,0 +1,4 @@
+# Portable policy kit: every enclave checks these files against SHA256SUMS.txt, so Git must keep their bytes exactly as built
+# (no line-ending conversion on commit, checkout or ZIP download).
+OCT_2026/GPO/policy/*.xml -text
+OCT_2026/GPO/policy/*.txt -text

@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <SiPolicy xmlns="urn:schemas-microsoft-com:sipolicy" PolicyType="Base Policy">
-  <VersionEx>2026.10.24.10</VersionEx>
+  <VersionEx>2026.11.2.2</VersionEx>
   <PlatformID>{2E07F7E4-194C-4D20-B7C9-6F44A6C5A234}</PlatformID>
   <Rules>
     <Rule>
@@ -2572,8 +2572,6 @@
     <Deny ID="ID_DENY_HVCISCAN_ARM_2_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Sha256" Hash="AC399FA29FAB56F01F63B499766D489198021C54C000463342E0382AD3AF29BE" />
     <Deny ID="ID_DENY_HVCISCAN_ARM_3_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Page Sha1" Hash="9FD720F1D4913073054D93CF446C9ADC7F0BA445" />
     <Deny ID="ID_DENY_HVCISCAN_ARM_4_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Page Sha256" Hash="8CBB25C135FBB43C67F70E933C482A8F6DA9F37FF4761FA061BBD91B30CEFE17" />
-    <Allow ID="ID_ALLOW_C_0_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\audio-capture.node; Correlation Id: {d2422aae-62cb-0004-b429-43d2cb62dd01}" FilePath="%OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\audio-capture.node" />
-    <Allow ID="ID_ALLOW_C_1_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\*; Correlation Id: {d2422aae-62cb-0004-b429-43d2cb62dd01}" FilePath="%OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\*" />
     <Allow ID="ID_ALLOW_C_2_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\cd.cp314-win_amd64.pyd; Correlation Id: {d2422aae-62cb-0002-64ee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\cd.cp314-win_amd64.pyd" />
     <Allow ID="ID_ALLOW_C_3_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\*; Correlation Id: {d2422aae-62cb-0002-64ee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\*" />
     <Allow ID="ID_ALLOW_C_4_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\md.cp314-win_amd64.pyd; Correlation Id: {d2422aae-62cb-0002-6aee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\md.cp314-win_amd64.pyd" />
@@ -6492,8 +6490,6 @@
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_2_0_0_0_0" />
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_3_0_0_0_0" />
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_4_0_0_0_0" />
-          <FileRuleRef RuleID="ID_ALLOW_C_0_1_0_0_0" />
-          <FileRuleRef RuleID="ID_ALLOW_C_1_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_2_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_3_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_4_1_0_0_0" />

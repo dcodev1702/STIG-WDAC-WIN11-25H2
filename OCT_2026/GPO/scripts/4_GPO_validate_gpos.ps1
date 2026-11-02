@@ -14,7 +14,7 @@ $Required = '{42B5FAAE-6536-11D2-AE5A-0000F87571E3}', '{AADCED64-746C-4633-A97C-
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = Resolve-WdacTargetOU $Cfg $Domain
     $DCs = @(Get-ADDomainController -Filter * | Sort-Object HostName | ForEach-Object { $_.HostName })
     $Links = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks)
     $Ver = @{}

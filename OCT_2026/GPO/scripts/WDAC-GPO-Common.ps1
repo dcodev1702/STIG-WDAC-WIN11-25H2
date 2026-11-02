@@ -48,7 +48,18 @@ function Get-WdacComputerOU([string]$ComputerName = $env:COMPUTERNAME) {
     return ($Dn -replace '^CN=(?:\\,|[^,])+,', '')
 }
 
-function Resolve-WdacTargetOU($Cfg) { if ($Cfg.TargetOU) { return $Cfg.TargetOU } else { return Get-WdacComputerOU } }
+# Target OU: the TargetOU setting, or the OU of this computer. With -Domain, an OU of another domain (for example a settings file
+# copied from another enclave) stops here, before anything is read from or written to the wrong place.
+function Resolve-WdacTargetOU($Cfg, $Domain) {
+    $OU = if ($Cfg.TargetOU) { "$($Cfg.TargetOU)".Trim() } else { Get-WdacComputerOU }
+    if ($Domain -and $Domain.DN) {
+        $Norm = { param($Dn) ("$Dn" -replace '\s*,\s*', ',').ToLowerInvariant() }
+        if (-not (& $Norm $OU).EndsWith(',' + (& $Norm $Domain.DN))) {
+            throw "STOP: target OU '$OU' is not in domain $($Domain.DnsRoot) ($($Domain.DN)). Set TargetOU in GPO-Settings.psd1 (or pass -TargetOU) to an OU of this domain, or leave it empty to use the OU of this computer. Nothing was changed."
+        }
+    }
+    return $OU
+}
 
 function Get-WdacDomainInfo {
     Import-WdacModule ActiveDirectory
@@ -120,6 +131,103 @@ function Read-WdacManifest([string]$Folder) {
     $File = Join-Path $Folder 'manifest.json'
     if (-not (Test-Path -LiteralPath $File)) { return $null }
     return (Get-Content -LiteralPath $File -Raw | ConvertFrom-Json)
+}
+
+# Portability gate for a policy XML that is published to other OUs and domains (enclaves). A FilePath rule under a named user
+# profile (C:\Users\<name>\...) works for that one user only, carries the user name - and the domain, in a <user>.<DOMAIN> profile
+# folder - into every enclave, and runtime FilePath rule protection ignores user-writable folders anyway: FAIL. The same text in
+# any other attribute or value (a FriendlyName copied from an event, for example) only discloses the name: WARN.
+function Get-WdacPortabilityFindings([string]$XmlPath) {
+    $Rows = New-Object System.Collections.Generic.List[object]
+    $Name = Split-Path -Leaf $XmlPath
+    $Doc = New-Object System.Xml.XmlDocument
+    try { $Doc.Load($XmlPath) }
+    catch { $Rows.Add([pscustomobject]@{ Status = 'FAIL'; Check = "$Name portability"; Detail = "cannot read the XML: $($_.Exception.Message)" }); return , $Rows.ToArray() }
+    $ProfileRx = '(?i)\\Users\\(?!(?:Public|Default|Default User|All Users)(?:\\|$))([^\\*]+)'
+    $RuleIds = New-Object System.Collections.Generic.List[string]
+    $Named = New-Object System.Collections.Generic.List[string]
+    $TextHits = New-Object System.Collections.Generic.List[string]
+    foreach ($Node in @($Doc.SelectNodes('//@*')) + @($Doc.SelectNodes('//text()'))) {
+        $M = [regex]::Match("$($Node.Value)", $ProfileRx)
+        if (-not $M.Success) { continue }
+        $Named.Add($M.Groups[1].Value)
+        $Owner = if ($Node.NodeType -eq 'Attribute') { $Node.OwnerElement } else { $Node.ParentNode }
+        $Id = if ($Owner -and $Owner.GetAttribute('ID')) { $Owner.GetAttribute('ID') } else { $Owner.LocalName }
+        if ($Node.NodeType -eq 'Attribute' -and $Node.LocalName -eq 'FilePath') { if (-not $RuleIds.Contains($Id)) { $RuleIds.Add($Id) } }
+        elseif (-not $RuleIds.Contains($Id)) { $TextHits.Add("$Id.$($Node.LocalName)") }
+    }
+    $Profiles = (@($Named | Sort-Object -Unique) | ForEach-Object { "'$_'" }) -join ', '
+    if ($RuleIds.Count) {
+        $Fix = "foreach (`$Id in '$($RuleIds -join "', '")') { Remove-CIPolicyRule -FilePath '$($XmlPath.Replace("'", "''"))' -Id `$Id }"
+        $Rows.Add([pscustomobject]@{ Status = 'FAIL'; Check = "$Name user-profile rules"; Detail = "$($RuleIds.Count) FilePath rule(s) name the user profile $Profiles ($($RuleIds -join ', ')). They allow files for that one user only, carry the user and domain name into every enclave, and runtime FilePath rule protection ignores user-writable folders. Remove them on the reference device (Windows PowerShell 5.1, ConfigCI): $Fix - or in the App Control Wizard - then run this step again." })
+    }
+    $TextOnly = @($TextHits | Where-Object { $RuleIds -notcontains ($_ -replace '\.[^.]+$', '') } | Sort-Object -Unique)
+    if ($TextOnly.Count) { $Rows.Add([pscustomobject]@{ Status = 'WARN'; Check = "$Name user-profile text"; Detail = "rule text names the user profile $Profiles ($($TextOnly -join ', ')). It changes nothing on the devices but discloses the name in every enclave - edit the text in the App Control Wizard." }) }
+    if (-not $RuleIds.Count -and -not $TextOnly.Count) { $Rows.Add([pscustomobject]@{ Status = 'OK'; Check = "$Name portability"; Detail = 'no rule or rule text names a user profile (C:\Users\<name>)' }) }
+    return , $Rows.ToArray()
+}
+
+# FilePath values of the policy's allow rules: what runtime FilePath rule protection checks on every device
+function Get-WdacFilePathRules([string]$XmlPath) {
+    $Doc = New-Object System.Xml.XmlDocument; $Doc.Load($XmlPath)
+    return , @($Doc.SiPolicy.FileRules.ChildNodes | Where-Object { $_.LocalName -eq 'Allow' -and $_.GetAttribute('FilePath') } | ForEach-Object { $_.GetAttribute('FilePath') } | Sort-Object -Unique)
+}
+
+# Runtime FilePath rule protection: Windows ignores a FilePath rule whose folder standard users can write to, so the files there are
+# BLOCKED under Enforce. Checks each rule folder (and its parents, not the drive root, where users may create folders by default) on
+# the computer it runs on - locally with &, or remotely with Invoke-Command, so it is self-contained. Write = write data/add file,
+# append data/add folder, delete, change permissions, take ownership, GENERIC_WRITE or GENERIC_ALL, granted to anyone other than
+# SYSTEM, TrustedInstaller, CREATOR OWNER and the administrator groups (the same rule 4_merge_audit_base_and_events_policies.ps1
+# applies to -AdditionalFolderRules). Returns one row per folder: Folder, Rules, Exists, Writers.
+$WdacFilePathFolderCheck = {
+    param([string[]]$RulePaths)
+    $WriteMask = 0x2 -bor 0x4 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000
+    $Admins = '(^|\\)(SYSTEM|TrustedInstaller|CREATOR OWNER|Administrators|Domain Admins|Enterprise Admins)$'
+    $ByFolder = [ordered]@{}
+    foreach ($Rule in @($RulePaths | Where-Object { $_ })) {
+        $Path = $Rule
+        foreach ($Macro in @(@('%OSDRIVE%', $env:SystemDrive), @('%WINDIR%', $env:SystemRoot), @('%SYSTEM32%', (Join-Path $env:SystemRoot 'System32')))) {
+            if ($Path.StartsWith($Macro[0], [StringComparison]::OrdinalIgnoreCase)) { $Path = $Macro[1] + $Path.Substring($Macro[0].Length) }
+        }
+        $Star = $Path.IndexOf('*')
+        $Folder = if ($Star -ge 0) { $Prefix = $Path.Substring(0, $Star); if ($Prefix.EndsWith('\')) { $Prefix.TrimEnd('\') } else { [IO.Path]::GetDirectoryName($Prefix) } }
+                  elseif (Test-Path -LiteralPath $Path -PathType Container) { $Path.TrimEnd('\') }
+                  else { [IO.Path]::GetDirectoryName($Path) }
+        if (-not $Folder) { $Folder = $Path }
+        if (-not $ByFolder.Contains($Folder)) { $ByFolder[$Folder] = New-Object System.Collections.Generic.List[string] }
+        $ByFolder[$Folder].Add($Rule)
+    }
+    foreach ($Folder in $ByFolder.Keys) {
+        $Exists = [bool](Test-Path -LiteralPath $Folder -PathType Container)
+        $Writers = New-Object System.Collections.Generic.List[string]
+        if ($Exists) {
+            $Root = ([IO.Path]::GetPathRoot($Folder)).TrimEnd('\')
+            $Dir = $Folder
+            while ($Dir -and $Dir.TrimEnd('\') -ne $Root) {
+                try {
+                    foreach ($Ace in (Get-Acl -LiteralPath $Dir -ErrorAction Stop).Access) {
+                        if ("$($Ace.AccessControlType)" -ne 'Allow' -or "$($Ace.IdentityReference)" -match $Admins) { continue }
+                        if (([int]$Ace.FileSystemRights -band $WriteMask) -ne 0 -and -not $Writers.Contains("$($Ace.IdentityReference) on $Dir")) { $Writers.Add("$($Ace.IdentityReference) on $Dir") }
+                    }
+                }
+                catch { $Writers.Add("ACL of $Dir unreadable: $($_.Exception.Message)") }
+                $Dir = [IO.Path]::GetDirectoryName($Dir)
+            }
+        }
+        [pscustomobject]@{ Folder = $Folder; Rules = $ByFolder[$Folder].ToArray(); Exists = $Exists; Writers = $Writers.ToArray() }
+    }
+}
+
+# Result rows for $WdacFilePathFolderCheck: one WARN per folder that is missing or user-writable, then one summary row
+function Add-WdacFolderCheckResults($List, $Rows, [string]$Prefix) {
+    $Rows = @($Rows | Where-Object { $_ })
+    $Bad = 0
+    foreach ($F in $Rows) {
+        $What = "$($F.Folder) ($(@($F.Rules).Count) rule(s), e.g. $(@($F.Rules)[0]))"
+        if (-not $F.Exists) { $Bad++; Add-WdacResult $List 'WARN' ("$Prefix FilePath folder").Trim() "$What does not exist on this computer - the rule allows nothing here" }
+        elseif (@($F.Writers).Count) { $Bad++; Add-WdacResult $List 'WARN' ("$Prefix FilePath folder").Trim() "$What is writable by $(@($F.Writers) -join '; ') - runtime FilePath rule protection ignores the rule, so files there are BLOCKED under Enforce. Remove write access for standard users in the image, or allow those files by publisher or hash." }
+    }
+    Add-WdacResult $List $(if ($Bad) { 'WARN' } else { 'OK' }) ("$Prefix FilePath folders").Trim() $(if ($Rows.Count) { "$($Rows.Count - $Bad) of $($Rows.Count) rule folder(s) admin-only$(if ($Bad) { "; $Bad need attention (rows above)" })" } else { 'the policy has no FilePath allow rules' })
 }
 
 # Win32_DeviceGuard values as people read them: 0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes the STIG)

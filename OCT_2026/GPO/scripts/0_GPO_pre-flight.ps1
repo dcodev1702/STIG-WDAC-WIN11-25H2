@@ -1,5 +1,7 @@
 # Step 0 - run on the fully configured WDAC REFERENCE device (elevated, Windows PowerShell 5.1 or PowerShell 7).
 # Read-only. Proves the reference device, the domain and your rights are ready before any GPO is created.
+# Works in any domain and OU (enclave): the domain is read from AD, the OU must belong to it, and the policy must not name a
+# user profile. FilePath rule folders are checked on this device (same image as the endpoints).
 param([string]$TargetOU)
 
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
@@ -34,8 +36,9 @@ try {
     }
 
     # ---------------------------------------------------------------- target OU and its members
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = $null
     try {
+        $OU = Resolve-WdacTargetOU $Cfg $Domain
         $OuObj = Get-ADOrganizationalUnit -Identity $OU -ErrorAction Stop
         Add-WdacResult $R 'OK' 'Target OU' "$($OuObj.Name) - $OU$(if (-not $Cfg.TargetOU) { ' (auto-detected from this computer)' })"
         $Members = @(Get-ADComputer -SearchBase $OU -Filter * -Properties OperatingSystem, OperatingSystemVersion)
@@ -47,7 +50,7 @@ try {
         $Links = @((Get-GPInheritance -Target $OU).GpoLinks | ForEach-Object { "$($_.DisplayName) (enabled=$($_.Enabled))" })
         Add-WdacResult $R 'OK' 'GPOs linked to OU' $(if ($Links) { $Links -join '; ' } else { '(none)' })
     }
-    catch { Add-WdacResult $R 'FAIL' 'Target OU' "$OU : $($_.Exception.Message)" }
+    catch { Add-WdacResult $R 'FAIL' 'Target OU' $(if ($OU) { "$OU : $($_.Exception.Message)" } else { $_.Exception.Message }) }
     foreach ($Name in $Cfg.AuditGpoName, $Cfg.EnforceGpoName) {
         $G = Get-GPO -Name $Name -ErrorAction SilentlyContinue
         Add-WdacResult $R 'OK' "GPO '$Name'" $(if ($G) { "exists ({$($G.Id)}) - 2_GPO_create_gpos.ps1 will UPDATE it" } else { 'does not exist yet - 2_GPO_create_gpos.ps1 will create it' })
@@ -64,6 +67,10 @@ try {
         if ($S.PolicyID -ieq $Guid -and $S.BasePolicyID -ieq $Guid -and $S.PolicyType -eq 'Base Policy') { Add-WdacResult $R 'OK' 'Base-Enforce.xml' "Base policy $Guid v$($S.VersionEx), Multiple Policy Format" } else { Add-WdacResult $R 'FAIL' 'Base-Enforce.xml' "PolicyID/BasePolicyID/type do not match PolicyGuid.txt ($Guid)" }
         if ($Opts -contains 'Enabled:Audit Mode') { Add-WdacResult $R 'FAIL' 'Base-Enforce.xml mode' 'Audit Mode is ON - the reference policy must be the enforced one' } else { Add-WdacResult $R 'OK' 'Base-Enforce.xml mode' 'Audit Mode OFF (enforced policy)' }
         Add-WdacResult $R $(if ($Opts -contains 'Enabled:Managed Installer') { 'OK' } else { 'WARN' }) 'Option 13 Managed Installer' $(if ($Opts -contains 'Enabled:Managed Installer') { 'ON (MECM / Intune)' } else { 'OFF' })
+        # The packages go to every device in the OU, and the same policy may serve other domains: nothing may name a user profile
+        foreach ($F in (Get-WdacPortabilityFindings $EnforceXml)) { Add-WdacResult $R $F.Status $F.Check $F.Detail }
+        # Runtime FilePath rule protection, checked on this device (built from the same image as the endpoints)
+        Add-WdacFolderCheckResults $R (& $WdacFilePathFolderCheck (Get-WdacFilePathRules $EnforceXml)) 'This device'
         $Plan = Get-WdacPackageVersions $Cfg $Guid $EnforceXml
         Add-WdacResult $R 'OK' 'Next package versions' "Audit $($Plan.Versions[0]) / Enforce $($Plan.Versions[1]) - $($Plan.Basis); highest known v$($Plan.Highest) ($($Plan.Sources))"
         $Active = @((& "$env:SystemRoot\System32\CiTool.exe" --list-policies -json | ConvertFrom-Json).Policies) | Where-Object { $_.PolicyID -ieq $Guid.Trim('{}') } | Select-Object -First 1

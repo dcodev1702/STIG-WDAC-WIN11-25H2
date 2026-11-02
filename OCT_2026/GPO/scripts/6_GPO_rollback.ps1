@@ -23,7 +23,7 @@ $R = New-WdacResults
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = Resolve-WdacTargetOU $Cfg $Domain
     $Names = @($Cfg.AuditGpoName, $Cfg.EnforceGpoName)
     $Links = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | Where-Object { $_.DisplayName -in $Names })
     $Guid = $null

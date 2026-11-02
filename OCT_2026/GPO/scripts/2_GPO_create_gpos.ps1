@@ -31,7 +31,7 @@ $Cse = @(
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = Resolve-WdacTargetOU $Cfg $Domain
     Get-ADOrganizationalUnit -Identity $OU -ErrorAction Stop | Out-Null
     if (-not $PackagePath) {
         $Latest = Join-Path $Cfg.PackageRoot 'latest.txt'

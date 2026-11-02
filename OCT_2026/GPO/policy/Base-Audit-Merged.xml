@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <SiPolicy xmlns="urn:schemas-microsoft-com:sipolicy" PolicyType="Base Policy">
-  <VersionEx>2026.10.24.8</VersionEx>
+  <VersionEx>2026.11.2.1</VersionEx>
   <PlatformID>{2E07F7E4-194C-4D20-B7C9-6F44A6C5A234}</PlatformID>
   <Rules>
     <Rule>
@@ -32,6 +32,9 @@
     </Rule>
     <Rule>
       <Option>Enabled:Managed Installer</Option>
+    </Rule>
+    <Rule>
+      <Option>Enabled:Audit Mode</Option>
     </Rule>
   </Rules>
   <!--EKUS-->
@@ -2572,8 +2575,6 @@
     <Deny ID="ID_DENY_HVCISCAN_ARM_2_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Sha256" Hash="AC399FA29FAB56F01F63B499766D489198021C54C000463342E0382AD3AF29BE" />
     <Deny ID="ID_DENY_HVCISCAN_ARM_3_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Page Sha1" Hash="9FD720F1D4913073054D93CF446C9ADC7F0BA445" />
     <Deny ID="ID_DENY_HVCISCAN_ARM_4_0_0_0_0" FriendlyName="HVCIScan.exe with missing resources ARM Hash Page Sha256" Hash="8CBB25C135FBB43C67F70E933C482A8F6DA9F37FF4761FA061BBD91B30CEFE17" />
-    <Allow ID="ID_ALLOW_C_0_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\audio-capture.node; Correlation Id: {d2422aae-62cb-0004-b429-43d2cb62dd01}" FilePath="%OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\audio-capture.node" />
-    <Allow ID="ID_ALLOW_C_1_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\*; Correlation Id: {d2422aae-62cb-0004-b429-43d2cb62dd01}" FilePath="%OSDRIVE%\Users\Lorenzo.SKYNET\.vscode\extensions\anthropic.claude-code-2.1.309-win32-x64\resources\audio-capture\x64-win32\*" />
     <Allow ID="ID_ALLOW_C_2_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\cd.cp314-win_amd64.pyd; Correlation Id: {d2422aae-62cb-0002-64ee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\cd.cp314-win_amd64.pyd" />
     <Allow ID="ID_ALLOW_C_3_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\*; Correlation Id: {d2422aae-62cb-0002-64ee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\*" />
     <Allow ID="ID_ALLOW_C_4_1_0_0_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\md.cp314-win_amd64.pyd; Correlation Id: {d2422aae-62cb-0002-6aee-43d2cb62dd01}" FilePath="%OSDRIVE%\Program Files\Microsoft SDKs\Azure\CLI2\Lib\site-packages\charset_normalizer\md.cp314-win_amd64.pyd" />
@@ -2584,21 +2585,15 @@
     <Allow ID="ID_ALLOW_A_1_1_0_0" FriendlyName="C:\Program Files\Microsoft SDKs\Azure\CLI2\* FileRule" MinimumFileVersion="0.0.0.0" FilePath="C:\Program Files\Microsoft SDKs\Azure\CLI2\*" />
     <Allow ID="ID_ALLOW_C_0_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\bin\zlib1.dll; Correlation Id: {502873fc-6312-0002-87a2-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\bin\zlib1.dll" />
     <Allow ID="ID_ALLOW_C_1_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\bin\*; Correlation Id: {502873fc-6312-0002-87a2-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\bin\*" />
-    <Allow ID="ID_ALLOW_B_2_1_0" FriendlyName="Allow libintl-8.dll by file attributes; Correlation Id: {502873fc-6312-0005-0357-2b501263dd01}" FileName="intl.dll" InternalName="intl.dll" FileDescription="LGPLed libintl for Windows" ProductName="GNU libintl: accessing NLS message catalogs" />
     <Allow ID="ID_ALLOW_C_2_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\bin\libpcre2-8-0.dll; Correlation Id: {502873fc-6312-0000-5eb4-3e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\bin\libpcre2-8-0.dll" />
-    <Allow ID="ID_ALLOW_B_3_1_0" FriendlyName="Allow libiconv-2.dll by file attributes; Correlation Id: {502873fc-6312-0006-135a-31501263dd01}" FileName="iconv.dll" InternalName="iconv.dll" FileDescription="LGPLed libiconv for Windows" ProductName="libiconv: character set conversion library" />
-    <Allow ID="ID_ALLOW_B_7_1_0" FriendlyName="Allow libcurl-4.dll by file attributes; Correlation Id: {502873fc-6312-0004-a1e5-2f501263dd01}" FileName="libcurl.dll" InternalName="libcurl" FileDescription="libcurl Shared Library" ProductName="The curl library" />
     <Allow ID="ID_ALLOW_C_4_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libbrotlidec.dll; Correlation Id: {502873fc-6312-0003-1074-2e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libbrotlidec.dll" />
     <Allow ID="ID_ALLOW_C_5_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\*; Correlation Id: {502873fc-6312-0003-1074-2e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\*" />
-    <Allow ID="ID_ALLOW_B_8_1_0" FriendlyName="Allow libssh2-1.dll by file attributes; Correlation Id: {502873fc-6312-0001-faae-2d501263dd01}" FileName="libssh2.dll" InternalName="libssh2" FileDescription="libssh2 Shared Library" ProductName="The libssh2 library" />
     <Allow ID="ID_ALLOW_C_6_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libidn2-0.dll; Correlation Id: {502873fc-6312-0007-5bc3-2c501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libidn2-0.dll" />
     <Allow ID="ID_ALLOW_C_8_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libbrotlicommon.dll; Correlation Id: {502873fc-6312-0001-ffae-2d501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libbrotlicommon.dll" />
     <Allow ID="ID_ALLOW_C_10_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libzstd.dll; Correlation Id: {502873fc-6312-0006-1e5c-31501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libzstd.dll" />
     <Allow ID="ID_ALLOW_C_12_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libpsl-5.dll; Correlation Id: {502873fc-6312-0002-bea4-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\mingw64\libexec\git-core\libpsl-5.dll" />
-    <Allow ID="ID_ALLOW_B_9_1_0" FriendlyName="Allow libunistring-5.dll by file attributes; Correlation Id: {502873fc-6312-0001-0eaf-2d501263dd01}" FileName="unistring.dll" InternalName="unistring.dll" FileDescription="LGPLed libunistring for Windows" ProductName="GNU libunistring: Unicode string library" />
     <Allow ID="ID_ALLOW_C_14_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\bash.exe; Correlation Id: {502873fc-6312-0002-11a5-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\bash.exe" />
     <Allow ID="ID_ALLOW_C_15_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\*; Correlation Id: {502873fc-6312-0002-11a5-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\*" />
-    <Allow ID="ID_ALLOW_B_11_1_0" FriendlyName="Allow msys-2.0.dll by file attributes; Correlation Id: {502873fc-6312-0004-bde5-2f501263dd01}" FileName="msys-2.0.dll" InternalName="msys-2.0.dll" FileDescription="Cygwin POSIX Emulation DLL" ProductName="MSYS2" />
     <Allow ID="ID_ALLOW_C_16_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\which.exe; Correlation Id: {502873fc-6312-0002-2ca5-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\which.exe" />
     <Allow ID="ID_ALLOW_C_18_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\locale.exe; Correlation Id: {502873fc-6312-0002-a6a5-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\locale.exe" />
     <Allow ID="ID_ALLOW_C_20_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\uname.exe; Correlation Id: {502873fc-6312-0002-0ea6-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\uname.exe" />
@@ -2616,7 +2611,6 @@
     <Allow ID="ID_ALLOW_C_44_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-ncursesw6.dll; Correlation Id: {502873fc-6312-0002-9ba6-36501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-ncursesw6.dll" />
     <Allow ID="ID_ALLOW_C_46_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\find.exe; Correlation Id: {502873fc-6312-0007-cbc3-2c501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\find.exe" />
     <Allow ID="ID_ALLOW_C_48_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\tar.exe; Correlation Id: {502873fc-6312-0000-33bb-3e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\tar.exe" />
-    <Allow ID="ID_ALLOW_B_14_1_0" FriendlyName="Allow curl.exe by file attributes; Correlation Id: {502873fc-6312-0006-e35d-31501263dd01}" FileName="curl.exe" InternalName="curl" FileDescription="The curl executable" ProductName="The curl executable" />
     <Allow ID="ID_ALLOW_C_50_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\ssh.exe; Correlation Id: {502873fc-6312-0004-6ee7-2f501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\ssh.exe" />
     <Allow ID="ID_ALLOW_C_52_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-gssapi-3.dll; Correlation Id: {502873fc-6312-0004-89e7-2f501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-gssapi-3.dll" />
     <Allow ID="ID_ALLOW_C_54_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-com_err-1.dll; Correlation Id: {502873fc-6312-0000-47bc-3e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-com_err-1.dll" />
@@ -2640,9 +2634,6 @@
     <Allow ID="ID_ALLOW_C_90_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-npth-0.dll; Correlation Id: {502873fc-6312-0006-a461-31501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-npth-0.dll" />
     <Allow ID="ID_ALLOW_C_92_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-gpg-error-0.dll; Correlation Id: {502873fc-6312-0003-5177-2e501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-gpg-error-0.dll" />
     <Allow ID="ID_ALLOW_C_94_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-gcrypt-20.dll; Correlation Id: {502873fc-6312-0007-83c4-2c501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-gcrypt-20.dll" />
-    <Allow ID="ID_ALLOW_B_16_1_0" FriendlyName="Allow openssl.exe by file attributes; Correlation Id: {502873fc-6312-0006-0262-31501263dd01}" FileName="openssl" InternalName="openssl" FileDescription="OpenSSL application" ProductName="The OpenSSL Toolkit" />
-    <Allow ID="ID_ALLOW_B_17_1_0" FriendlyName="Allow libssl-3-x64.dll by file attributes; Correlation Id: {502873fc-6312-0001-f7ca-2d501263dd01}" FileName="libssl" InternalName="libssl" FileDescription="OpenSSL library" ProductName="The OpenSSL Toolkit" />
-    <Allow ID="ID_ALLOW_B_18_1_0" FriendlyName="Allow libcrypto-3-x64.dll by file attributes; Correlation Id: {502873fc-6312-0004-9f10-30501263dd01}" FileName="libcrypto" InternalName="libcrypto" FileDescription="OpenSSL library" ProductName="The OpenSSL Toolkit" />
     <Allow ID="ID_ALLOW_C_96_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\less.exe; Correlation Id: {502873fc-6312-0002-fa01-37501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\less.exe" />
     <Allow ID="ID_ALLOW_C_98_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\msys-pcre2-8-0.dll; Correlation Id: {502873fc-6312-0004-722a-30501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\msys-pcre2-8-0.dll" />
     <Allow ID="ID_ALLOW_C_100_1_0" FriendlyName="Allow path: %OSDRIVE%\Program Files\Git\usr\bin\vim.exe; Correlation Id: {502873fc-6312-0000-dd11-3f501263dd01}" FilePath="%OSDRIVE%\Program Files\Git\usr\bin\vim.exe" />
@@ -6502,8 +6493,6 @@
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_2_0_0_0_0" />
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_3_0_0_0_0" />
           <FileRuleRef RuleID="ID_DENY_HVCISCAN_ARM_4_0_0_0_0" />
-          <FileRuleRef RuleID="ID_ALLOW_C_0_1_0_0_0" />
-          <FileRuleRef RuleID="ID_ALLOW_C_1_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_2_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_3_1_0_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_4_1_0_0_0" />
@@ -6514,21 +6503,15 @@
           <FileRuleRef RuleID="ID_ALLOW_A_1_1_0_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_0_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_1_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_2_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_2_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_3_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_7_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_4_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_5_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_8_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_6_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_8_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_10_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_12_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_9_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_14_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_15_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_11_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_16_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_18_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_20_1_0" />
@@ -6546,7 +6529,6 @@
           <FileRuleRef RuleID="ID_ALLOW_C_44_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_46_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_48_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_14_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_50_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_52_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_54_1_0" />
@@ -6570,9 +6552,6 @@
           <FileRuleRef RuleID="ID_ALLOW_C_90_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_92_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_94_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_16_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_17_1_0" />
-          <FileRuleRef RuleID="ID_ALLOW_B_18_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_96_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_98_1_0" />
           <FileRuleRef RuleID="ID_ALLOW_C_100_1_0" />
@@ -6605,12 +6584,12 @@
     </Setting>
     <Setting Provider="PolicyInfo" Key="Information" ValueName="Name">
       <Value>
-        <String>PAW-WDAC-GPO-Enforce</String>
+        <String>PAW-WDAC-Audit-Merged</String>
       </Value>
     </Setting>
     <Setting Provider="PolicyInfo" Key="Information" ValueName="Id">
       <Value>
-        <String>GPO-ENFORCE-2026.10.24.8</String>
+        <String>PAW-AUDIT-MERGED-v2</String>
       </Value>
     </Setting>
   </Settings>

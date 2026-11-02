@@ -22,7 +22,7 @@ $Failed = 1
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
-    $OU = Resolve-WdacTargetOU $Cfg
+    $OU = Resolve-WdacTargetOU $Cfg $Domain
     $Before = @{}
     $Man = @{}
     foreach ($M in 'Audit', 'Enforce') {
