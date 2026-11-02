@@ -6,12 +6,13 @@
 # Checks: computer in the OU, which WDAC GPO applied, scheduled task, deployment log/events/state, CiTool version = the GPO's
 # package, .cip on disk, Event 3099, Win32_DeviceGuard (0 = OFF, 1 = AUDIT, 2 = ENFORCING; Audit: UMCI 1 / Enforce: 2 / 2 = STIG
 # PASS), 3076/3077 counts, and the folders of the package's FilePath rules on the endpoint (admin-only, or the rule is ignored).
+# After the table, the STIG check per computer in colour: green = 2 (ENFORCING, compliant), yellow = 1 (AUDIT), red = 0 (OFF).
 param(
     [string[]]$ComputerName = @($env:COMPUTERNAME),
     [ValidateSet('Audit', 'Enforce')][string]$ExpectedMode,
     # Optional regex for the application you intend to keep BLOCKED; its 3077 events count as expected, not as a warning
     [string]$BlockTestPattern = '',
-    [string]$TargetOU,
+    [string[]]$TargetOU,
     [string]$AuditGpoName,
     [string]$EnforceGpoName
 )
@@ -19,6 +20,8 @@ param(
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
 $Cfg = Initialize-WdacGpo -ScriptName '5_GPO_validate_endpoint' -Overrides @{ TargetOU = $TargetOU; AuditGpoName = $AuditGpoName; EnforceGpoName = $EnforceGpoName }
 $R = New-WdacResults
+# Win32_DeviceGuard per computer, shown in colour after the table (green = compliant, yellow = AUDIT, red = OFF)
+$Stig = New-Object System.Collections.Generic.List[object]
 try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
@@ -101,9 +104,9 @@ try {
         Add-WdacResult $R $(if ($VerOk) { 'OK' } else { 'FAIL' }) "$C active policy" $(if ($P) { "$($P.FriendlyName) {$($P.PolicyID)} v$($P.VersionString) active=$($P.IsEnforced) authorized=$($P.IsAuthorized) (GPO package v$($Base.Version))" } else { 'policy not present' })
         Add-WdacResult $R $(if ($X.CipOnDisk) { 'OK' } else { 'FAIL' }) "$C .cip on disk" "CiPolicies\Active\$($Base.PolicyGuid).cip present=$($X.CipOnDisk)"
         Add-WdacResult $R $(if ($X.Ev3099) { 'OK' } else { 'WARN' }) "$C Event 3099" $(if ($X.Ev3099) { $X.Ev3099 -join '' } else { "none since $($X.Since)" })
-        $Stig = Format-WdacStig $X.KMCI $X.UMCI
+        $Stig.Add([pscustomobject]@{ Computer = $C; Kmci = $X.KMCI; Umci = $X.UMCI })
         $StigOk = if ($ExpectedMode -eq 'Enforce') { $X.KMCI -eq 2 -and $X.UMCI -eq 2 } else { $X.UMCI -eq 1 }
-        Add-WdacResult $R $(if ($StigOk) { 'OK' } else { 'FAIL' }) "$C Win32_DeviceGuard" "$Stig - $(if ($ExpectedMode -eq 'Enforce') { if ($StigOk) { 'both PASS' } else { 'expected 2 (ENFORCING) for both' } } else { 'user mode 1 (AUDIT) expected in Audit mode: V-243451 stays open until Enforce' })"
+        Add-WdacResult $R $(if ($StigOk) { 'OK' } else { 'FAIL' }) "$C Win32_DeviceGuard" "$(Format-WdacStig $X.KMCI $X.UMCI) - $(if ($ExpectedMode -eq 'Enforce') { if ($StigOk) { 'both PASS' } else { 'expected 2 (ENFORCING) for both' } } else { 'user mode 1 (AUDIT) expected in Audit mode: V-243451 stays open until Enforce' })"
         $Expected = @($X.BlockedFiles | Where-Object { $BlockTestPattern -and $_ -match $BlockTestPattern })
         $Unexpected = @($X.BlockedFiles | Where-Object { -not ($BlockTestPattern -and $_ -match $BlockTestPattern) })
         Add-WdacResult $R $(if ($ExpectedMode -eq 'Audit' -or $Unexpected.Count -eq 0) { 'OK' } else { 'WARN' }) "$C events since $($X.Since)" "3076 (would block) = $($X.Count3076), 3077 (blocked) = $($X.Count3077)$(if ($ExpectedMode -eq 'Audit' -and $X.Count3076) { ' - review with C:\WDAC\config\scripts\Export-CIEventEvidence.ps1 before enforcing' })"
@@ -126,6 +129,7 @@ try {
 catch { Add-WdacResult $R 'FAIL' 'Unexpected error' "$($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim()))" }
 finally {
     $Failed = Write-WdacResults $R $Cfg "Endpoint validation ($ExpectedMode)"
+    foreach ($S in $Stig) { Write-WdacStigStatus $S.Computer $S.Kmci $S.Umci }
     Stop-WdacTranscript
 }
 if ($Failed) { exit 1 }

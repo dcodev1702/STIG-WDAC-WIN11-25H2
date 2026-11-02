@@ -10,8 +10,10 @@
 #   1. Kit: hashes, one GUID, modes, Audit-Merged = Enforce except Audit Mode, every XML compiles, no user-profile rule.
 #   2. Helpers: portability gate, OU-in-domain check, GPO paths per domain, FilePath folder check.
 #   3. Steps 0, 1, 2, 4, 3 (and the new step 5 rows) run unchanged in two domains with different names and OUs: identical policy
-#      content, each domain's own SYSVOL paths and OU links only. A TargetOU of the other domain, a publish without confirmation
-#      and a policy with a user-profile rule are refused with nothing changed.
+#      content, each domain's own SYSVOL paths and OU links only. The target OU comes from this computer's account in one domain
+#      (TargetOU empty) and from the settings file in the other (computer in another OU); -TargetOU typed without quotes works.
+#      A TargetOU of the other domain or a container, a publish without confirmation and a policy with a user-profile rule are
+#      refused with nothing changed.
 # Results: console table + <WorkRoot>\Test-WdacGpoPortability.csv, transcript next to it; exit 1 on any FAIL.
 param(
     [string]$KitPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'policy'),
@@ -153,14 +155,19 @@ try {
     Add-TestResult 'OK' 'Real state snapshot (before)' "$($RealBefore.Count) lines: GPOs of the domain, links on $RealOU, App Control policies on $env:COMPUTERNAME"
 
     # Stand-ins. State lives in $Global:WdacSim (a stand-in called from a script resolves $script: to that script's scope).
-    function global:Get-ADDomain { [CmdletBinding()] param([Parameter(Position = 0)]$Identity, $Server) $D = $Global:WdacSim.Domain; [pscustomobject]@{ DNSRoot = $D.DnsRoot; DistinguishedName = $D.DN; PDCEmulator = $D.PDC; NetBIOSName = $D.NetBIOS } }
+    function global:Get-ADDomain { [CmdletBinding()] param([Parameter(Position = 0)]$Identity, $Server, $Current) $D = $Global:WdacSim.Domain; [pscustomobject]@{ DNSRoot = $D.DnsRoot; DistinguishedName = $D.DN; PDCEmulator = $D.PDC; NetBIOSName = $D.NetBIOS } }
     function global:Get-ADDomainController { [CmdletBinding()] param($Filter, $Server) [pscustomobject]@{ HostName = $Global:WdacSim.Domain.PDC; OperatingSystem = 'Windows Server 2025 Datacenter (simulated)' } }
     function global:Get-ADOrganizationalUnit {
         [CmdletBinding()] param([Parameter(Position = 0)]$Identity, $Server)
         if ($Global:WdacSim.OUs -notcontains "$Identity") { throw "Cannot find an object with identity: '$Identity' under: '$($Global:WdacSim.Domain.DN)'." }
         [pscustomobject]@{ Name = ("$Identity" -replace '^OU=((?:\\,|[^,])+),.*$', '$1'); DistinguishedName = "$Identity" }
     }
-    function global:Get-ADComputer { [CmdletBinding()] param($SearchBase, $Filter, $Properties) foreach ($N in 'PAW01', 'PAW02') { [pscustomobject]@{ Name = "$($Global:WdacSim.Key.ToUpper())-$N"; OperatingSystem = 'Windows 11 Enterprise'; OperatingSystemVersion = '10.0 (28000)'; DistinguishedName = "CN=$N,$SearchBase" } } }
+    function global:Get-ADComputer {
+        [CmdletBinding()] param([Parameter(Position = 0)]$Identity, $SearchBase, $Filter, $Properties, $Server)
+        # -Identity: this computer's account, which sits in $Global:WdacSim.ComputerOU of the simulated domain
+        if ($Identity) { if ("$Identity" -ne $env:COMPUTERNAME) { throw "Cannot find an object with identity: '$Identity' under: '$($Global:WdacSim.Domain.DN)'." }; return [pscustomobject]@{ Name = "$Identity"; DistinguishedName = "CN=$Identity,$($Global:WdacSim.ComputerOU)" } }
+        foreach ($N in 'PAW01', 'PAW02') { [pscustomobject]@{ Name = "$($Global:WdacSim.Key.ToUpper())-$N"; OperatingSystem = 'Windows 11 Enterprise'; OperatingSystemVersion = '10.0 (28000)'; DistinguishedName = "CN=$N,$SearchBase" } }
+    }
     function global:Get-ADObject {
         [CmdletBinding()] param([Parameter(Position = 0)]$Identity, $Properties, $Server)
         $O = $Global:WdacSim.Ad["$Identity"]
@@ -237,9 +244,13 @@ try {
     }
     Add-TestResult 'OK' 'Stand-ins in place' "$($Guarded.Count) AD / Group Policy / identity commands resolve to in-memory stand-ins"
 
+    # enclave2: TargetOU empty, this computer's account sits in the PAW OU (auto-detected). enclave3: TargetOU set in the settings
+    # file, this computer's account sits in ANOTHER OU (the setting wins).
     $Enclaves = @(
-        [pscustomobject]@{ Key = 'enclave2'; DnsRoot = 'enclave2.example'; NetBIOS = 'ENCLAVE2'; DN = 'DC=enclave2,DC=example'; OU = 'OU=PAW Workstations,DC=enclave2,DC=example' },
-        [pscustomobject]@{ Key = 'enclave3'; DnsRoot = 'ops.enclave3.mil'; NetBIOS = 'ENC3OPS'; DN = 'DC=ops,DC=enclave3,DC=mil'; OU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil' }
+        [pscustomobject]@{ Key = 'enclave2'; DnsRoot = 'enclave2.example'; NetBIOS = 'ENCLAVE2'; DN = 'DC=enclave2,DC=example'; OU = 'OU=PAW Workstations,DC=enclave2,DC=example'
+                           SettingsOU = ''; ComputerOU = 'OU=PAW Workstations,DC=enclave2,DC=example'; From = 'auto-detected: OU of this computer' },
+        [pscustomobject]@{ Key = 'enclave3'; DnsRoot = 'ops.enclave3.mil'; NetBIOS = 'ENC3OPS'; DN = 'DC=ops,DC=enclave3,DC=mil'; OU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil'
+                           SettingsOU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil'; ComputerOU = 'OU=Build Servers,DC=ops,DC=enclave3,DC=mil'; From = 'TargetOU in GPO-Settings.psd1' }
     )
     $Q = { param($Value) "'" + ("$Value" -replace "'", "''") + "'" }
     $Built = @{}
@@ -253,7 +264,7 @@ try {
         Get-ChildItem -LiteralPath $ScriptsPath -File | Copy-Item -Destination $Scr -Force
         @(
             '@{'
-            "    TargetOU          = $(& $Q $E.OU)"
+            "    TargetOU          = $(& $Q $E.SettingsOU)"
             "    AuditGpoName      = $(& $Q $Settings['AuditGpoName'])"
             "    EnforceGpoName    = $(& $Q $Settings['EnforceGpoName'])"
             "    PolicyNamePrefix  = $(& $Q $Settings['PolicyNamePrefix'])"
@@ -265,12 +276,12 @@ try {
         $Policies = Join-Path $Share "$K\dc\SYSVOL\$($E.DnsRoot)\Policies"
         New-Item -Path $Policies -ItemType Directory -Force | Out-Null
         $Global:WdacSim = @{
-            Key = $K; OUs = @($E.OU); SysvolPolicies = $Policies; GpoRoot = $GpoRoot
+            Key = $K; OUs = @($E.OU, $E.ComputerOU | Select-Object -Unique); ComputerOU = $E.ComputerOU; SysvolPolicies = $Policies; GpoRoot = $GpoRoot
             Domain = [pscustomobject]@{ DnsRoot = $E.DnsRoot; DN = $E.DN; NetBIOS = $E.NetBIOS; PDC = (Join-Path $Share "$K\dc").Substring(2) }
             Gpos = @{}; Ad = @{}; Registry = @{}
             Links = New-Object System.Collections.Generic.List[object]; Calls = New-Object System.Collections.Generic.List[string]
         }
-        Add-TestResult 'OK' "$K setup" "domain $($E.DnsRoot) ($($E.NetBIOS)), OU $($E.OU), kit copied to $Src"
+        Add-TestResult 'OK' "$K setup" "domain $($E.DnsRoot) ($($E.NetBIOS)), target OU $($E.OU), settings TargetOU '$($E.SettingsOU)', this computer's account in $($E.ComputerOU), kit copied to $Src"
 
         # step 0: pre-flight in this domain, then with the OTHER enclave's OU
         $S0 = Invoke-WdacStep (Join-Path $Scr '0_GPO_pre-flight.ps1')
@@ -278,7 +289,7 @@ try {
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'Domain' } | Select-Object -First 1
         Assert-That ("$($Row.Detail)" -like "$($E.DnsRoot) ($($E.NetBIOS))*") "$K step 0 domain read from AD" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'Target OU' } | Select-Object -First 1
-        Assert-That ($Row.Status -eq 'OK' -and "$($Row.Detail)" -like "*$($E.OU)*") "$K step 0 target OU" "$($Row.Detail)"
+        Assert-That ($Row.Status -eq 'OK' -and "$($Row.Detail)" -like "* - $($E.OU) (from $($E.From)*") "$K step 0 target OU ($($E.From))" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'Base-Enforce.xml portability' } | Select-Object -First 1
         Assert-That ($Row.Status -eq 'OK') "$K step 0 portability gate" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'This device FilePath folders' } | Select-Object -First 1
@@ -287,6 +298,13 @@ try {
         $SN = Invoke-WdacStep (Join-Path $Scr '0_GPO_pre-flight.ps1') @{ TargetOU = $Other.OU }
         $Row = $SN.Rows | Where-Object { $_.Check -eq 'Target OU' } | Select-Object -First 1
         Assert-That ($SN.ExitCode -eq 1 -and $Row.Status -eq 'FAIL' -and "$($Row.Detail)" -like '*is not in domain*') "$K step 0 refuses the OU of $($Other.Key)" "exit $($SN.ExitCode): $($Row.Detail)"
+        # -TargetOU typed without quotes reaches the script split at its commas; a container cannot hold GPO links
+        $SU = Invoke-WdacStep (Join-Path $Scr '0_GPO_pre-flight.ps1') @{ TargetOU = [string[]]@($E.OU -split ',') }
+        $Row = $SU.Rows | Where-Object { $_.Check -eq 'Target OU' } | Select-Object -First 1
+        Assert-That ($Row.Status -eq 'OK' -and "$($Row.Detail)" -like "* - $($E.OU) (from -TargetOU parameter)") "$K step 0 -TargetOU without quotes" "$(@($E.OU -split ',').Count) pieces -> $($Row.Detail)"
+        $SC = Invoke-WdacStep (Join-Path $Scr '0_GPO_pre-flight.ps1') @{ TargetOU = "CN=Computers,$($E.DN)" }
+        $Row = $SC.Rows | Where-Object { $_.Check -eq 'Target OU' } | Select-Object -First 1
+        Assert-That ($SC.ExitCode -eq 1 -and $Row.Status -eq 'FAIL' -and "$($Row.Detail)" -like '*is not an organizational unit*') "$K step 0 refuses a container" "exit $($SC.ExitCode): $($Row.Detail)"
 
         # step 1: build from the kit, then refuse a policy with a user-profile rule
         $S1 = Invoke-WdacStep (Join-Path $Scr '1_GPO_build_packages.ps1')
@@ -311,6 +329,8 @@ try {
         Assert-That ($S2N.ExitCode -eq 1 -and $Global:WdacSim.Gpos.Count -eq 0 -and $Global:WdacSim.Links.Count -eq 0 -and $Global:WdacSim.Calls.Count -eq 0) "$K step 2 without confirmation changes nothing" "exit $($S2N.ExitCode), GPOs $($Global:WdacSim.Gpos.Count), links $($Global:WdacSim.Links.Count): $(Format-Fails $S2N)"
         $S2 = Invoke-WdacStep (Join-Path $Scr '2_GPO_create_gpos.ps1') @{ NoConfirm = $true }
         Assert-That ($S2.ExitCode -eq 0 -and -not (Format-Fails $S2)) "$K step 2 publish" "exit $($S2.ExitCode); $($Global:WdacSim.Calls.Count) simulated AD/GPO change(s)$(if (Format-Fails $S2) { '; FAIL: ' + (Format-Fails $S2) })"
+        $Row = $S2.Rows | Where-Object { $_.Check -eq 'Inputs' } | Select-Object -First 1
+        Assert-That ("$($Row.Detail)" -like "*| OU $($E.OU) ($($E.From)*") "$K step 2 target OU ($($E.From))" "$($Row.Detail)"
         $Me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         foreach ($Mode in 'Audit', 'Enforce') {
             $Name = $Settings["${Mode}GpoName"]

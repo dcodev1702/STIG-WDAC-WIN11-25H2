@@ -22,6 +22,10 @@ function Initialize-WdacGpo([string]$ScriptName, [hashtable]$Overrides = @{}, [s
     $Cfg = @{}
     $SettingsFile = Join-Path $PSScriptRoot 'GPO-Settings.psd1'
     if (Test-Path -LiteralPath $SettingsFile) { $Cfg = Import-PowerShellDataFile -LiteralPath $SettingsFile }
+    # Where the target OU comes from, shown next to it in the output (Resolve-WdacTargetOU fills in the auto-detected case).
+    # -TargetOU is [string[]] in every step: a DN typed without quotes (-TargetOU OU=PAWs,DC=corp,DC=mil) arrives split at its commas.
+    $Cfg.TargetOUFrom = if ("$($Cfg.TargetOU)".Trim()) { 'TargetOU in GPO-Settings.psd1' } else { '' }
+    if ($Overrides.TargetOU) { $Overrides.TargetOU = (@($Overrides.TargetOU) | ForEach-Object { "$_".Trim() }) -join ','; $Cfg.TargetOUFrom = '-TargetOU parameter' }
     foreach ($Key in @($Overrides.Keys)) { if ($Overrides[$Key]) { $Cfg[$Key] = $Overrides[$Key] } }
     foreach ($Key in 'AuditGpoName', 'EnforceGpoName', 'PolicyNamePrefix', 'WdacRoot', 'GpoRoot') { if (-not $Cfg[$Key]) { throw "STOP: setting '$Key' is empty (GPO-Settings.psd1)." } }
     if (-not $Cfg.TaskIntervalHours) { $Cfg.TaskIntervalHours = 4 }
@@ -39,24 +43,31 @@ function Initialize-WdacGpo([string]$ScriptName, [hashtable]$Overrides = @{}, [s
 
 function Stop-WdacTranscript { try { Stop-Transcript | Out-Null } catch { } }
 
-# Distinguished name of the OU that holds a computer (default: this computer)
-function Get-WdacComputerOU([string]$ComputerName = $env:COMPUTERNAME) {
-    $Searcher = [adsisearcher]"(&(objectCategory=computer)(sAMAccountName=$ComputerName`$))"
-    $Found = $Searcher.FindOne()
-    if (-not $Found) { throw "STOP: computer '$ComputerName' was not found in Active Directory." }
-    $Dn = [string]$Found.Properties.distinguishedname
+# Distinguished name of the OU (or container) that holds a computer account (default: this computer). It is read on the PDC
+# emulator of this computer's domain - the domain controller the GPO links are written to - not on whichever domain controller
+# of the signed-in user's domain answers first.
+function Get-WdacComputerOU([string]$ComputerName = $env:COMPUTERNAME, $Domain) {
+    if (-not $Domain) { $Domain = Get-WdacDomainInfo }
+    try { $Dn = "$((Get-ADComputer -Identity $ComputerName -Server $Domain.PDC -ErrorAction Stop).DistinguishedName)" }
+    catch { throw "STOP: computer '$ComputerName' was not found in domain $($Domain.DnsRoot) on $($Domain.PDC): $($_.Exception.Message)" }
     return ($Dn -replace '^CN=(?:\\,|[^,])+,', '')
 }
 
-# Target OU: the TargetOU setting, or the OU of this computer. With -Domain, an OU of another domain (for example a settings file
-# copied from another enclave) stops here, before anything is read from or written to the wrong place.
+# Target OU: -TargetOU, else TargetOU in GPO-Settings.psd1, else the OU that holds this computer's account; $Cfg.TargetOUFrom
+# says which, for the output. An OU of another domain (for example a settings file copied from another enclave) or a container
+# that cannot hold GPO links (CN=Computers) stops here, before anything is read from or written to the wrong place.
 function Resolve-WdacTargetOU($Cfg, $Domain) {
-    $OU = if ($Cfg.TargetOU) { "$($Cfg.TargetOU)".Trim() } else { Get-WdacComputerOU }
+    $OU = "$($Cfg.TargetOU)".Trim()
+    if (-not $OU) { $OU = Get-WdacComputerOU $env:COMPUTERNAME $Domain; $Cfg.TargetOUFrom = "auto-detected: OU of this computer $env:COMPUTERNAME" }
+    $From = if ($Cfg.TargetOUFrom) { " (from $($Cfg.TargetOUFrom))" } else { '' }
     if ($Domain -and $Domain.DN) {
         $Norm = { param($Dn) ("$Dn" -replace '\s*,\s*', ',').ToLowerInvariant() }
         if (-not (& $Norm $OU).EndsWith(',' + (& $Norm $Domain.DN))) {
-            throw "STOP: target OU '$OU' is not in domain $($Domain.DnsRoot) ($($Domain.DN)). Set TargetOU in GPO-Settings.psd1 (or pass -TargetOU) to an OU of this domain, or leave it empty to use the OU of this computer. Nothing was changed."
+            throw "STOP: target OU '$OU'$From is not in domain $($Domain.DnsRoot) ($($Domain.DN)). Set TargetOU in GPO-Settings.psd1 (or pass -TargetOU in quotes) to an OU of this domain, or leave it empty to use the OU of this computer. Nothing was changed."
         }
+    }
+    if ($OU -notmatch '^(?i)OU=') {
+        throw "STOP: target '$OU'$From is not an organizational unit - GPOs cannot be linked to a container such as CN=Computers. Move the computer accounts into an OU and set TargetOU to it (or move this computer there and leave TargetOU empty). Nothing was changed."
     }
     return $OU
 }
@@ -73,9 +84,10 @@ function Test-WdacLocalComputer([string]$Name) {
     return (@($Mine | Where-Object { $_ -and "$_" -ieq $N }).Count -gt 0)
 }
 
+# The domain of THIS computer (not of the signed-in account, which can belong to another domain of the forest)
 function Get-WdacDomainInfo {
     Import-WdacModule ActiveDirectory
-    $D = Get-ADDomain -ErrorAction Stop
+    $D = Get-ADDomain -Current LocalComputer -ErrorAction Stop
     [pscustomobject]@{ DnsRoot = $D.DNSRoot; DN = $D.DistinguishedName; PDC = $D.PDCEmulator; NetBIOS = $D.NetBIOSName }
 }
 
@@ -245,6 +257,21 @@ function Add-WdacFolderCheckResults($List, $Rows, [string]$Prefix) {
 # Win32_DeviceGuard values as people read them: 0 = OFF, 1 = AUDIT, 2 = ENFORCING (only 2 passes the STIG)
 function Format-WdacCiStatus([int]$Value) { "$Value ($(switch ($Value) { 0 { 'OFF' } 1 { 'AUDIT' } 2 { 'ENFORCING' } default { 'UNKNOWN' } }))" }
 function Format-WdacStig([int]$Kmci, [int]$Umci) { "V-243450 kernel $(Format-WdacCiStatus $Kmci) / V-243451 user $(Format-WdacCiStatus $Umci)" }
+
+# The STIG verdict in colour, one line per control: 2 (ENFORCING) = compliant, green; 1 (AUDIT) = yellow; 0 (OFF) or anything
+# else = red
+function Write-WdacStigStatus([string]$Computer, [int]$Kmci, [int]$Umci) {
+    Write-Host "STIG check on $Computer (Win32_DeviceGuard):"
+    foreach ($S in @(@('V-243450', 'kernel-mode code integrity', $Kmci), @('V-243451', 'user-mode code integrity  ', $Umci))) {
+        $V = [int]$S[2]
+        $Verdict, $Color = switch ($V) {
+            2 { 'COMPLIANT', 'Green' }
+            1 { 'AUDIT - logs only, not compliant until Enforce', 'Yellow' }
+            default { 'NOT COMPLIANT - App Control is not active', 'Red' }
+        }
+        Write-Host ('  {0} {1}  {2}  {3}' -f $S[0], $S[1], (Format-WdacCiStatus $V), $Verdict) -ForegroundColor $Color
+    }
+}
 
 # PASS / WARN / FAIL result tables
 function New-WdacResults { return , (New-Object System.Collections.Generic.List[object]) }

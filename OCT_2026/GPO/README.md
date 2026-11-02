@@ -91,7 +91,7 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once. Any script parameter with
 
 | Setting | Proven value | Meaning |
 |---|---|---|
-| `TargetOU` | `''` | Distinguished name of the target OU. **Empty = the OU of the computer running the scripts.** It must be an OU of the domain the scripts run in; one from another domain stops every step with nothing changed. |
+| `TargetOU` | `''` | Distinguished name of the target OU. **Empty = the OU of the computer running the scripts**, read from its computer account on the PDC emulator of its own domain. It must be an OU of that domain; one from another domain, or a container such as `CN=Computers`, stops every step with nothing changed. |
 | `AuditGpoName` | `JMSC-WDAC-PAWS - AppControl Audit` | Audit GPO name |
 | `EnforceGpoName` | `JMSC-WDAC-PAWS - AppControl Enforce` | Enforce GPO name |
 | `PolicyNamePrefix` | `PAW-WDAC-GPO` | Friendly name stamped into the packages, e.g. `PAW-WDAC-GPO-Enforce` in CiTool and Event 3099 |
@@ -101,6 +101,8 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once. Any script parameter with
 
 > [!IMPORTANT]
 > If the reference device is **not** in the target OU, set `TargetOU` explicitly. Otherwise the GPOs are linked to the reference device's own OU.
+
+The target OU comes from the first of these that is set: **`-TargetOU`** on the command line, then **`TargetOU` in `GPO-Settings.psd1`**, then **the OU of this computer**. A `TargetOU` left in the settings file therefore wins over the computer's own OU. Steps 0, 2 and 3 print the OU with its source (`-TargetOU parameter`, `TargetOU in GPO-Settings.psd1`, or `auto-detected: OU of this computer <name>`), and steps 2 and 3 show it again in the yellow Y/N prompt, so check it there before you answer **Y**. `-TargetOU` works with or without quotes; quote it when an OU name contains a space.
 
 ### 3.1 One Policy Kit, Several Enclaves (Domains and OUs)
 
@@ -134,7 +136,7 @@ The policy holds rules, options and one GUID. It names no domain, OU, computer o
 
 | Guard | Steps | What it stops |
 |---|---|---|
-| OU in this domain | 0, 2 – 6 | A `TargetOU` from another domain, such as a settings file copied between enclaves: *"STOP: target OU … is not in domain …"*, with nothing changed. |
+| OU in this domain | 0, 2 – 6 | A `TargetOU` from another domain, such as a settings file copied between enclaves: *"STOP: target OU … is not in domain …"*, with nothing changed. A container such as `CN=Computers` stops the same way: *"… is not an organizational unit"*. |
 | Portability gate | 0, 1 | A FilePath rule under a named user profile (`C:\Users\<name>\…`) in `Base-Enforce.xml` or a `-SupplementalXml`: **FAIL**, nothing compiled. Such a rule allows files for one user only. It carries that user's name, and the domain in `<user>.<DOMAIN>` profile folders, into every enclave. Runtime FilePath rule protection ignores user-writable folders anyway. The FAIL row prints the `Remove-CIPolicyRule` command that removes it. A user profile that appears only in rule text, such as a FriendlyName, is a **WARN**. |
 | FilePath rule folders | 0 (reference device), 5 (each endpoint) | A FilePath rule folder that standard users can write to, or that doesn't exist: **WARN**. Windows ignores that rule, so the files in that folder are **blocked** under Enforce. Fix the folder's ACL in the image. |
 
@@ -274,6 +276,8 @@ Package build: PASSED.
 .\4_GPO_validate_gpos.ps1
 ```
 
+Before anything changes, step 2 shows the target OU and where it came from (§3) in its *Inputs* row and in the yellow Y/N prompt. Answer **N** if it isn't the OU you want.
+
 **Step 2**, for each GPO. It **creates** the GPO if missing and **updates** it otherwise (that's also how you publish a new package):
 
 | Action | Detail |
@@ -331,6 +335,20 @@ To check the computer you are on, run it **on that computer** without `-Computer
 | `Win32_DeviceGuard` (`0` OFF · `1` AUDIT · `2` ENFORCING) | **V-243451 user `1 (AUDIT)`**, an open finding until Enforce. V-243450 kernel reads `1 (AUDIT)`, or `2 (ENFORCING)` if platform policies already enforce kernel mode. |
 | 3076 / 3077 since deployment | reported |
 | FilePath rule folders listed in the published `manifest.json`, checked on the endpoint | admin-only. A folder that is missing or user-writable is a WARN: Windows ignores that rule, so the files there are blocked under Enforce (§3.1). |
+
+After the results table, step 5 prints the **STIG check** for each computer, one coloured line per control:
+
+| Colour | `Win32_DeviceGuard` value | Meaning |
+|---|---|---|
+| **Green** | `2 (ENFORCING)` | **COMPLIANT** |
+| **Yellow** | `1 (AUDIT)` | Logs only. Not compliant until Enforce. |
+| **Red** | `0 (OFF)` or any other value | **NOT COMPLIANT**: App Control is not active |
+
+```text
+STIG check on PAW01 (Win32_DeviceGuard):
+  V-243450 kernel-mode code integrity  2 (ENFORCING)  COMPLIANT
+  V-243451 user-mode code integrity    1 (AUDIT)  AUDIT - logs only, not compliant until Enforce
+```
 
 ### 8.3 The Audit Period
 
@@ -482,6 +500,10 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | Step 4 **FAIL** *version AD/SYSVOL* differ | Replication in progress, or a manual SYSVOL edit | Wait for replication; re-run `2_GPO_create_gpos.ps1` |
 | Unexpected **3077** under Enforce | An app was missing from the reference policy | Fix on the reference device → `1_` → `2_` (§10.1), or demote (§10.2) |
 | Any step: **STOP** *"target OU … is not in domain …"* | `TargetOU` belongs to another domain, for example a settings file copied from another enclave | Set `TargetOU` to an OU of this domain, or leave it empty when the reference device is in the target OU (§3.1) |
+| Step 2 picked an OU you didn't expect | The source in brackets says why. *TargetOU in GPO-Settings.psd1*: a value left in the settings file wins over the computer's own OU. *auto-detected*: the computer account was read on the PDC emulator, so a computer moved on another DC moments ago may not have replicated there yet. | Answer **N**. Clear `TargetOU` in the settings file or pass `-TargetOU`. After a move, wait for replication, then run step 2 again. |
+| Any step: **STOP** *"target OU 'OU=x DC=y DC=z' is not in domain …"* (scripts before 2026-11-02) | `-TargetOU` typed without quotes reached the script split at its commas | Update the scripts (they now accept it), or put the DN in quotes |
+| Steps 0, 2 – 6: **STOP** *"… is not an organizational unit"* | The target is a container, such as `CN=Computers`, which can't have GPO links | Move the computer accounts into an OU and set `TargetOU` to it |
+| Step 2: **STOP** *"target OU … was not found on …"* (the PDC emulator) | A typo in the DN, or an OU created on another DC that hasn't replicated to the PDC emulator yet | Check the DN (copy it from the OU's *distinguishedName* attribute); wait for replication |
 | Steps 0 / 1: **FAIL** *user-profile rules* | A FilePath rule names `C:\Users\<name>`: it works for one user only and carries that name into every enclave | On the reference device, run the `Remove-CIPolicyRule` command the row prints (or remove the rule in the Wizard), then run the step again |
 | Steps 0 / 5: **WARN** *FilePath folder … is writable by …* | Standard users can write to a FilePath rule's folder, so Windows ignores the rule | Remove that write access in the image (§3.1), or allow those files by publisher or hash |
 | Step 5: **WARN** *manifest has no FilePathRules* | The published package was built before this check | Build and publish a new pair: `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` |
@@ -505,7 +527,9 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | `6_GPO_rollback.ps1` | **`-Action DisableLinks\|RemovePolicy\|RemoveGpos`** · `-ComputerName` · `-Force` · `-NoConfirm` · `-WhatIf` |
 | `Deploy-WDACPolicy.ps1` *(endpoint, run by the GPO)* | `-Mode Audit\|Enforce` · `-PayloadPath` (its own folder) · `-NoConfirm` (always passed by the GPO) |
 | `WDAC-Confirm.ps1` *(helper, dot-sourced)* | `Confirm-WdacChange`: the yellow Y/N prompt used by steps 2, 3 and 6. Identical to `C:\WDAC\config\scripts\WDAC-Confirm.ps1`. |
-| `tests\Test-WdacGpoPortability.ps1` *(test, changes nothing)* | `-KitPath` (`..\policy`) · `-ScriptsPath` (`..\scripts`) · `-WorkRoot` (`%TEMP%\WDAC-GPO-Portability-<stamp>`). See §3.1. |
+| `tests\Test-WdacGpoPortability.ps1` *(test, changes nothing)* | `-KitPath` (`..\policy`) · `-ScriptsPath` (`..\scripts`) · `-WorkRoot` (`%TEMP%\WDAC-GPO-Portability-<stamp>`). Keep `-WorkRoot` short: Windows PowerShell 5.1 can't write the simulated SYSVOL paths past 260 characters. See §3.1. |
+
+`-TargetOU` (steps 0 and 2–6) overrides `TargetOU` in `GPO-Settings.psd1`, with or without quotes (§3).
 
 ## Appendix B — What the GPOs Contain
 

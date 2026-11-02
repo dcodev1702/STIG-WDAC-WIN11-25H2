@@ -6,7 +6,7 @@
 # about a minute later; the startup script also applies it at the next boot.
 param(
     [Parameter(Mandatory)][ValidateSet('Audit', 'Enforce', 'None')][string]$Mode,
-    [string]$TargetOU,
+    [string[]]$TargetOU,
     [string]$AuditGpoName,
     [string]$EnforceGpoName,
     # Run 'gpupdate /target:computer /force' on THIS computer afterwards (handy on the proving-ground device)
@@ -43,6 +43,7 @@ try {
     $Now = if ($Before.Audit -and $Before.Enforce) { 'both links enabled' } elseif ($Before.Audit) { 'Audit' } elseif ($Before.Enforce) { 'Enforce' } else { 'None' }
     if ($Now -ne $Mode) {
         Confirm-WdacChange -NoConfirm:$NoConfirm -Action "switch $OU from mode '$Now' to mode '$Mode'" -Detail @(
+            "Target OU from $($Cfg.TargetOUFrom)",
             $(switch ($Mode) {
                 'Audit' { "Audit link ENABLED (package v$VA), Enforce link disabled. Devices log what would be blocked (Event 3076); nothing is blocked." }
                 'Enforce' { "Enforce link ENABLED (package v$VE), Audit link disabled. Devices BLOCK every file the policy does not allow (Event 3077)." }

@@ -2,7 +2,7 @@
 # Read-only. Proves the reference device, the domain and your rights are ready before any GPO is created.
 # Works in any domain and OU (enclave): the domain is read from AD, the OU must belong to it, and the policy must not name a
 # user profile. FilePath rule folders are checked on this device (same image as the endpoints).
-param([string]$TargetOU)
+param([string[]]$TargetOU)
 
 . "$PSScriptRoot\WDAC-GPO-Common.ps1"
 $Cfg = Initialize-WdacGpo -ScriptName '0_GPO_pre-flight' -Overrides @{ TargetOU = $TargetOU }
@@ -30,7 +30,7 @@ try {
     # ---------------------------------------------------------------- domain, DCs, SYSVOL
     $Domain = Get-WdacDomainInfo
     Add-WdacResult $R 'OK' 'Domain' "$($Domain.DnsRoot) ($($Domain.NetBIOS)) - PDC emulator $($Domain.PDC)"
-    foreach ($DC in @(Get-ADDomainController -Filter * | Sort-Object HostName)) {
+    foreach ($DC in @(Get-ADDomainController -Filter * -Server $Domain.PDC | Sort-Object HostName)) {
         $Path = "\\$($DC.HostName)\SYSVOL\$($Domain.DnsRoot)\Policies"
         if (Test-Path -LiteralPath $Path) { Add-WdacResult $R 'OK' "SYSVOL on $($DC.HostName)" "$Path reachable ($($DC.OperatingSystem))" } else { Add-WdacResult $R 'FAIL' "SYSVOL on $($DC.HostName)" "$Path not reachable" }
     }
@@ -39,20 +39,20 @@ try {
     $OU = $null
     try {
         $OU = Resolve-WdacTargetOU $Cfg $Domain
-        $OuObj = Get-ADOrganizationalUnit -Identity $OU -ErrorAction Stop
-        Add-WdacResult $R 'OK' 'Target OU' "$($OuObj.Name) - $OU$(if (-not $Cfg.TargetOU) { ' (auto-detected from this computer)' })"
-        $Members = @(Get-ADComputer -SearchBase $OU -Filter * -Properties OperatingSystem, OperatingSystemVersion)
+        $OuObj = Get-ADOrganizationalUnit -Identity $OU -Server $Domain.PDC -ErrorAction Stop
+        Add-WdacResult $R 'OK' 'Target OU' "$($OuObj.Name) - $OU (from $($Cfg.TargetOUFrom))"
+        $Members = @(Get-ADComputer -SearchBase $OU -Filter * -Properties OperatingSystem, OperatingSystemVersion -Server $Domain.PDC)
         foreach ($C in $Members) {
             $Status = if ($C.OperatingSystem -match 'Windows 1[01] (Enterprise|Education|Pro)') { 'OK' } else { 'WARN' }
             Add-WdacResult $R $Status "OU member $($C.Name)" "$($C.OperatingSystem) $($C.OperatingSystemVersion)$(if ($Status -eq 'WARN') { ' - not a Windows client edition; the endpoint script will skip it' })"
         }
         if ($Members.Count -eq 0) { Add-WdacResult $R 'WARN' 'OU members' 'No computers in the OU yet' }
-        $Links = @((Get-GPInheritance -Target $OU).GpoLinks | ForEach-Object { "$($_.DisplayName) (enabled=$($_.Enabled))" })
+        $Links = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | ForEach-Object { "$($_.DisplayName) (enabled=$($_.Enabled))" })
         Add-WdacResult $R 'OK' 'GPOs linked to OU' $(if ($Links) { $Links -join '; ' } else { '(none)' })
     }
     catch { Add-WdacResult $R 'FAIL' 'Target OU' $(if ($OU) { "$OU : $($_.Exception.Message)" } else { $_.Exception.Message }) }
     foreach ($Name in $Cfg.AuditGpoName, $Cfg.EnforceGpoName) {
-        $G = Get-GPO -Name $Name -ErrorAction SilentlyContinue
+        $G = Get-GPO -Name $Name -Server $Domain.PDC -ErrorAction SilentlyContinue
         Add-WdacResult $R 'OK' "GPO '$Name'" $(if ($G) { "exists ({$($G.Id)}) - 2_GPO_create_gpos.ps1 will UPDATE it" } else { 'does not exist yet - 2_GPO_create_gpos.ps1 will create it' })
     }
 

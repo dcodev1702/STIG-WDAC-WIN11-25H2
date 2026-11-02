@@ -9,7 +9,7 @@
 param(
     [Parameter(Mandatory)][ValidateSet('DisableLinks', 'RemovePolicy', 'RemoveGpos')][string]$Action,
     [string[]]$ComputerName = @($env:COMPUTERNAME),
-    [string]$TargetOU,
+    [string[]]$TargetOU,
     [string]$AuditGpoName,
     [string]$EnforceGpoName,
     [switch]$Force,

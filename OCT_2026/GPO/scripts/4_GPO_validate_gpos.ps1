@@ -2,7 +2,7 @@
 # Checks AD + SYSVOL on EVERY domain controller: payload files and hashes, manifest, startup script, scheduled task, CSEs,
 # versions, status, security filtering, links (never both enabled) and the Audit < Enforce version order.
 param(
-    [string]$TargetOU,
+    [string[]]$TargetOU,
     [string]$AuditGpoName,
     [string]$EnforceGpoName
 )
@@ -15,7 +15,7 @@ try {
     Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
     $Domain = Get-WdacDomainInfo
     $OU = Resolve-WdacTargetOU $Cfg $Domain
-    $DCs = @(Get-ADDomainController -Filter * | Sort-Object HostName | ForEach-Object { $_.HostName })
+    $DCs = @(Get-ADDomainController -Filter * -Server $Domain.PDC | Sort-Object HostName | ForEach-Object { $_.HostName })
     $Links = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks)
     $Ver = @{}
     foreach ($Mode in 'Audit', 'Enforce') {
