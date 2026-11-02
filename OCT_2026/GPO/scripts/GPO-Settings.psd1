@@ -4,8 +4,8 @@
     TargetOU          = ''
 
     # The two GPOs. Both are linked to the target OU; only one link is enabled at a time (3_GPO_set_mode.ps1).
-    AuditGpoName      = 'JMSC-WDAC-PAWS - AppControl Audit'
-    EnforceGpoName    = 'JMSC-WDAC-PAWS - AppControl Enforce'
+    AuditGpoName      = ''
+    EnforceGpoName    = ''
 
     # Friendly-name prefix stamped into the packaged policies (shown by CiTool and Event 3099 on the endpoints).
     PolicyNamePrefix  = 'PAW-WDAC-GPO'
