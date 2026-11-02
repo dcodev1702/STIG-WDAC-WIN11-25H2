@@ -12,8 +12,8 @@
 #   3. Steps 0, 1, 2, 4, 3 (and the new step 5 rows) run unchanged in two domains with different names and OUs: identical policy
 #      content, each domain's own SYSVOL paths and OU links only. The target OU comes from this computer's account in one domain
 #      (TargetOU empty) and from the settings file in the other (computer in another OU); -TargetOU typed without quotes works.
-#      A TargetOU of the other domain or a container, a publish without confirmation and a policy with a user-profile rule are
-#      refused with nothing changed.
+#      A TargetOU of the other domain or a container, empty or identical GPO names, a publish without confirmation and a policy
+#      with a user-profile rule are refused with nothing changed.
 # Results: console table + <WorkRoot>\Test-WdacGpoPortability.csv, transcript next to it; exit 1 on any FAIL.
 param(
     [string]$KitPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'policy'),
@@ -149,6 +149,8 @@ try {
 
     # ------------------------------------------------------------ 3. two simulated enclaves
     $Settings = Import-PowerShellDataFile -LiteralPath (Join-Path $ScriptsPath 'GPO-Settings.psd1')
+    # GPO names left empty in GPO-Settings.psd1: the simulated enclaves use test names
+    foreach ($Key in 'AuditGpoName', 'EnforceGpoName') { if (-not "$($Settings[$Key])".Trim()) { $Settings[$Key] = 'WDAC-PORTABILITY-TEST - AppControl ' + ($Key -replace 'GpoName$', '') } }
     $RealOU = Get-WdacComputerOU
     $BuildDomain = Get-WdacDomainInfo   # the real domain of this computer, read before the stand-ins exist
     $RealBefore = Get-WdacRealState $RealOU
@@ -243,6 +245,21 @@ try {
         if (-not $C -or $C.CommandType -ne 'Function' -or $C.Module) { throw "STOP: $N resolves to $($C.CommandType) $($C.Source), not to the test stand-in - refusing to run the GPO scripts. Nothing was changed." }
     }
     Add-TestResult 'OK' 'Stand-ins in place' "$($Guarded.Count) AD / Group Policy / identity commands resolve to in-memory stand-ins"
+
+    # GPO names empty or identical: every step stops before it creates a folder, a log or anything else
+    $Blank = Join-Path $WorkRoot 'scripts-blank-gpo-names'; $BlankGpoRoot = Join-Path $WorkRoot 'blank-gpo-root'
+    New-Item -Path $Blank -ItemType Directory -Force | Out-Null
+    Get-ChildItem -LiteralPath $ScriptsPath -File | Copy-Item -Destination $Blank -Force
+    @('@{', "    TargetOU = ''", "    AuditGpoName = ''", "    EnforceGpoName = ''", "    PolicyNamePrefix = 'PAW-WDAC-GPO'", "    WdacRoot = '$(Join-Path $WorkRoot 'blank-wdac')'", "    GpoRoot = '$BlankGpoRoot'", '}') | Set-Content -LiteralPath (Join-Path $Blank 'GPO-Settings.psd1') -Encoding ASCII
+    foreach ($Case in @(
+            @{ Step = '0_GPO_pre-flight.ps1'; Args = @{}; Want = 'STOP: AuditGpoName is empty*' },
+            @{ Step = '1_GPO_build_packages.ps1'; Args = @{}; Want = 'STOP: AuditGpoName is empty*' },
+            @{ Step = '2_GPO_create_gpos.ps1'; Args = @{ NoConfirm = $true }; Want = 'STOP: AuditGpoName is empty*' },
+            @{ Step = '2_GPO_create_gpos.ps1'; Args = @{ AuditGpoName = 'Same Name'; EnforceGpoName = 'Same Name'; NoConfirm = $true }; Want = 'STOP: AuditGpoName and EnforceGpoName are both*' })) {
+        $A = $Case.Args
+        $Msg = try { & (Join-Path $Blank $Case.Step) @A *>&1 | Out-Null; '(did not stop)' } catch { $_.Exception.Message }
+        Assert-That ($Msg -like $Case.Want -and -not (Test-Path -LiteralPath $BlankGpoRoot)) "GPO names: $($Case.Step) $(@($A.Keys | Where-Object { $_ -ne 'NoConfirm' }) -join ' ')".TrimEnd() "$Msg | nothing created: $(-not (Test-Path -LiteralPath $BlankGpoRoot))"
+    }
 
     # enclave2: TargetOU empty, this computer's account sits in the PAW OU (auto-detected). enclave3: TargetOU set in the settings
     # file, this computer's account sits in ANOTHER OU (the setting wins).

@@ -27,6 +27,11 @@ function Initialize-WdacGpo([string]$ScriptName, [hashtable]$Overrides = @{}, [s
     $Cfg.TargetOUFrom = if ("$($Cfg.TargetOU)".Trim()) { 'TargetOU in GPO-Settings.psd1' } else { '' }
     if ($Overrides.TargetOU) { $Overrides.TargetOU = (@($Overrides.TargetOU) | ForEach-Object { "$_".Trim() }) -join ','; $Cfg.TargetOUFrom = '-TargetOU parameter' }
     foreach ($Key in @($Overrides.Keys)) { if ($Overrides[$Key]) { $Cfg[$Key] = $Overrides[$Key] } }
+    # Both GPO names are required and must differ
+    foreach ($Key in 'AuditGpoName', 'EnforceGpoName') {
+        if (-not "$($Cfg[$Key])".Trim()) { throw "STOP: $Key is empty. Set AuditGpoName and EnforceGpoName in $SettingsFile to the names of this enclave's two WDAC GPOs, for example 'PAW-WDAC - AppControl Audit' and 'PAW-WDAC - AppControl Enforce'. Nothing was changed." }
+    }
+    if ("$($Cfg.AuditGpoName)".Trim() -eq "$($Cfg.EnforceGpoName)".Trim()) { throw "STOP: AuditGpoName and EnforceGpoName are both '$($Cfg.AuditGpoName)' - the Audit and Enforce GPOs need different names. Nothing was changed." }
     foreach ($Key in 'AuditGpoName', 'EnforceGpoName', 'PolicyNamePrefix', 'WdacRoot', 'GpoRoot') { if (-not $Cfg[$Key]) { throw "STOP: setting '$Key' is empty (GPO-Settings.psd1)." } }
     if (-not $Cfg.TaskIntervalHours) { $Cfg.TaskIntervalHours = 4 }
     $Cfg.LogDir = Join-Path $Cfg.GpoRoot 'Logs'
