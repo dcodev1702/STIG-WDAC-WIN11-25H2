@@ -1,6 +1,7 @@
 # Step 5 - validate an endpoint after a mode change (elevated, Windows PowerShell 5.1 or PowerShell 7). Read-only.
 #   .\5_GPO_validate_endpoint.ps1                                  # this computer, expected mode = the OU's enabled GPO
 #   .\5_GPO_validate_endpoint.ps1 -ComputerName PAW01,PAW02        # remote (WinRM) endpoints
+# This computer is always checked locally, without WinRM: no -ComputerName, or its NetBIOS / DNS / FQDN name, localhost or '.'.
 #   .\5_GPO_validate_endpoint.ps1 -ExpectedMode Enforce            # no GroupPolicy module needed
 # Checks: computer in the OU, which WDAC GPO applied, scheduled task, deployment log/events/state, CiTool version = the GPO's
 # package, .cip on disk, Event 3099, Win32_DeviceGuard (0 = OFF, 1 = AUDIT, 2 = ENFORCING; Audit: UMCI 1 / Enforce: 2 / 2 = STIG
@@ -50,7 +51,18 @@ try {
         $Out.State = if (Test-Path $StateFile) { Get-Content $StateFile -Raw | ConvertFrom-Json } else { $null }
         $LogFile = Join-Path $env:SystemRoot 'Logs\WDAC-GPO\Deploy-WDACPolicy.log'
         $Out.LogTail = if (Test-Path $LogFile) { @(Get-Content $LogFile -Tail 8) } else { @() }
-        $Out.Events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'WDAC-GPO' } -MaxEvents 6 -ErrorAction SilentlyContinue | ForEach-Object { "$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) $($_.Id) $($_.LevelDisplayName): $($_.Message)" })
+        # Every event query goes through $Query: "no events" is an empty result, any other failure becomes a note (a WARN row)
+        # instead of stopping the whole validation. Get-WinEvent THROWS "The parameter is incorrect." for an event source that is
+        # not registered, whatever -ErrorAction says - and WDAC-GPO exists only after Deploy-WDACPolicy.ps1 has run here.
+        $Notes = New-Object System.Collections.Generic.List[string]
+        $Query = {
+            param([hashtable]$Filter, [int]$Max, [string]$What)
+            try { if ($Max) { Get-WinEvent -FilterHashtable $Filter -MaxEvents $Max -ErrorAction Stop } else { Get-WinEvent -FilterHashtable $Filter -ErrorAction Stop } }
+            catch { if ("$($_.FullyQualifiedErrorId)" -notlike 'NoMatchingEventsFound*') { $Notes.Add("${What}: $($_.Exception.Message)") } }
+        }
+        $HasSource = try { [Diagnostics.EventLog]::SourceExists('WDAC-GPO') } catch { $false }
+        if (-not $HasSource) { $Notes.Add('Application log: event source WDAC-GPO is not registered - Deploy-WDACPolicy.ps1 (GPO startup script / scheduled task) has not run on this computer yet') }
+        $Out.Events = if ($HasSource) { @(& $Query @{ LogName = 'Application'; ProviderName = 'WDAC-GPO' } 6 'Application log, source WDAC-GPO' | ForEach-Object { "$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) $($_.Id) $($_.LevelDisplayName): $($_.Message)" }) } else { @() }
         $Pol = @((& $CiTool --list-policies -json | ConvertFrom-Json).Policies)
         $G2 = $Guid.Trim('{}').ToLower()
         $Out.Policy = $Pol | Where-Object { $_.PolicyID -eq $G2 } | Select-Object -First 1 PolicyID, FriendlyName, VersionString, IsEnforced, IsAuthorized
@@ -61,16 +73,19 @@ try {
         $Out.KMCI = [int]$DG.CodeIntegrityPolicyEnforcementStatus; $Out.UMCI = [int]$DG.UsermodeCodeIntegrityPolicyEnforcementStatus
         $Since = if ($Out.State -and $Out.State.LastChange) { [datetime]$Out.State.LastChange } else { (Get-Date).AddHours(-24) }
         $Out.Since = $Since.ToString('yyyy-MM-dd HH:mm:ss')
-        $Out.Ev3099 = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3099; StartTime = $Since.AddMinutes(-2) } -ErrorAction SilentlyContinue | Where-Object { $_.Message -match $G2 } | Select-Object -First 1 | ForEach-Object { "$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) $($_.Message)" })
-        $Out.Count3076 = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076; StartTime = $Since } -ErrorAction SilentlyContinue).Count
-        $Blocks = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3077; StartTime = $Since } -ErrorAction SilentlyContinue)
+        $Out.Ev3099 = @(& $Query @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3099; StartTime = $Since.AddMinutes(-2) } 0 'CodeIntegrity 3099' | Where-Object { $_.Message -match $G2 } | Select-Object -First 1 | ForEach-Object { "$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) $($_.Message)" })
+        $Out.Count3076 = @(& $Query @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076; StartTime = $Since } 0 'CodeIntegrity 3076').Count
+        $Blocks = @(& $Query @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3077; StartTime = $Since } 0 'CodeIntegrity 3077')
         $Out.Count3077 = $Blocks.Count
         $Out.BlockedFiles = @($Blocks | ForEach-Object { $D = ([xml]$_.ToXml()).Event.EventData.Data; "$((($D | Where-Object { $_.Name -eq 'File Name' }).'#text') -replace '^\\Device\\HarddiskVolume\d+', $env:SystemDrive) <- $(Split-Path -Leaf (($D | Where-Object { $_.Name -eq 'Process Name' }).'#text'))" } | Select-Object -Unique)
+        $Out.Notes = $Notes.ToArray()
         return [pscustomobject]$Out
     }
 
     foreach ($Computer in $ComputerName) {
-        $X = if ($Computer -eq $env:COMPUTERNAME -or $Computer -eq 'localhost') { & $Probe $Base.PolicyGuid $Base.Version $ExpectedMode $GpoName $OtherName }
+        # This computer (by NetBIOS, DNS or FQDN name, localhost or '.') is checked in-process; only other computers use WinRM
+        $Local = Test-WdacLocalComputer $Computer
+        $X = if ($Local) { & $Probe $Base.PolicyGuid $Base.Version $ExpectedMode $GpoName $OtherName }
              else { Invoke-Command -ComputerName $Computer -ScriptBlock $Probe -ArgumentList $Base.PolicyGuid, $Base.Version, $ExpectedMode, $GpoName, $OtherName -ErrorAction Stop }
         $C = $Computer
         Add-WdacResult $R 'OK' "$C OS" $X.OS
@@ -94,6 +109,7 @@ try {
         Add-WdacResult $R $(if ($ExpectedMode -eq 'Audit' -or $Unexpected.Count -eq 0) { 'OK' } else { 'WARN' }) "$C events since $($X.Since)" "3076 (would block) = $($X.Count3076), 3077 (blocked) = $($X.Count3077)$(if ($ExpectedMode -eq 'Audit' -and $X.Count3076) { ' - review with C:\WDAC\config\scripts\Export-CIEventEvidence.ps1 before enforcing' })"
         if ($Expected) { Add-WdacResult $R 'OK' "$C expected blocks" "matching '$BlockTestPattern': $($Expected -join '; ')" }
         if ($Unexpected) { Add-WdacResult $R 'WARN' "$C blocks to review" (($Unexpected -join '; ') + ' - an approved app needs a fix-forward (new package pair)') }
+        foreach ($Note in @($X.Notes)) { Add-WdacResult $R 'WARN' "$C event query" $Note }
         if ($X.OtherBases) { Add-WdacResult $R 'WARN' "$C other base policies" ($X.OtherBases -join '; ') }
         if ($X.Supplementals) { Add-WdacResult $R 'OK' "$C supplementals" ($X.Supplementals -join '; ') }
         foreach ($Line in @($X.LogTail | Select-Object -Last 3)) { Add-WdacResult $R 'OK' "$C deploy log" $Line }
@@ -101,13 +117,13 @@ try {
         if ($Man.PSObject.Properties.Name -notcontains 'FilePathRules') { Add-WdacResult $R 'WARN' "$C FilePath folders" 'the published manifest has no FilePathRules (built before this check) - rebuild and publish with 1_GPO_build_packages.ps1 and 2_GPO_create_gpos.ps1 to check them' }
         else {
             $Rules = [string[]]@($Man.FilePathRules)
-            $Folders = if ($Computer -eq $env:COMPUTERNAME -or $Computer -eq 'localhost') { & $WdacFilePathFolderCheck $Rules }
+            $Folders = if ($Local) { & $WdacFilePathFolderCheck $Rules }
                        else { Invoke-Command -ComputerName $Computer -ScriptBlock $WdacFilePathFolderCheck -ArgumentList (, $Rules) -ErrorAction Stop }
             Add-WdacFolderCheckResults $R $Folders $C
         }
     }
 }
-catch { Add-WdacResult $R 'FAIL' 'Unexpected error' $_.Exception.Message }
+catch { Add-WdacResult $R 'FAIL' 'Unexpected error' "$($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim()))" }
 finally {
     $Failed = Write-WdacResults $R $Cfg "Endpoint validation ($ExpectedMode)"
     Stop-WdacTranscript

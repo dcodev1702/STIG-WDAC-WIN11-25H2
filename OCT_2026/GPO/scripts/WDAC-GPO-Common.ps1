@@ -61,6 +61,18 @@ function Resolve-WdacTargetOU($Cfg, $Domain) {
     return $OU
 }
 
+# True when a -ComputerName value means THIS computer, which is then checked in-process, never over WinRM: its NetBIOS name
+# ($env:COMPUTERNAME, at most 15 characters), its full DNS host name (which can be longer - a 16-character host name has a
+# truncated NetBIOS name), its FQDN, localhost, '.', or the loopback address.
+function Test-WdacLocalComputer([string]$Name) {
+    $N = "$Name".Trim().TrimEnd('.')
+    if (-not $N -or $N -eq '.') { return $true }
+    $Cs = Get-CimInstance -ClassName Win32_ComputerSystem
+    $Mine = @($env:COMPUTERNAME, $Cs.Name, $Cs.DNSHostName, [Net.Dns]::GetHostName(), 'localhost', '127.0.0.1', '::1')
+    if ($Cs.DNSHostName -and $Cs.Domain) { $Mine += "$($Cs.DNSHostName).$($Cs.Domain)" }
+    return (@($Mine | Where-Object { $_ -and "$_" -ieq $N }).Count -gt 0)
+}
+
 function Get-WdacDomainInfo {
     Import-WdacModule ActiveDirectory
     $D = Get-ADDomain -ErrorAction Stop

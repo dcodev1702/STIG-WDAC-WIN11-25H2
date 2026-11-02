@@ -70,7 +70,7 @@ try {
                     [pscustomobject]@{ Before = $(if ($Before) { "$($Before.FriendlyName) v$($Before.VersionString) active=$($Before.IsEnforced)" } else { 'not present' }); Output = ($Out -join ' '); Exit = $Code
                         After = $(if ($After) { "$($After.FriendlyName) v$($After.VersionString) active=$($After.IsEnforced)" } else { 'not present' }); KMCI = [int]$DG.CodeIntegrityPolicyEnforcementStatus; UMCI = [int]$DG.UsermodeCodeIntegrityPolicyEnforcementStatus }
                 }
-                $X = if ($Computer -eq $env:COMPUTERNAME) { & $Remove $Guid } else { Invoke-Command -ComputerName $Computer -ScriptBlock $Remove -ArgumentList $Guid -ErrorAction Stop }
+                $X = if (Test-WdacLocalComputer $Computer) { & $Remove $Guid } else { Invoke-Command -ComputerName $Computer -ScriptBlock $Remove -ArgumentList $Guid -ErrorAction Stop }
                 Add-WdacResult $R $(if ($X.Exit -eq 0) { 'OK' } else { 'FAIL' }) "$Computer remove $Guid" "before: $($X.Before) | CiTool: $($X.Output) | after: $($X.After) | STIG now $(Format-WdacStig $X.KMCI $X.UMCI) (a reboot completes the removal)"
             }
         }

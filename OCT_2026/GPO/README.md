@@ -319,6 +319,8 @@ Endpoints pick this up at their next background refresh (90 ± 30 minutes) or at
 .\5_GPO_validate_endpoint.ps1 -ComputerName PAW01, PAW02        # remote, over WinRM
 ```
 
+To check the computer you are on, run it **on that computer** without `-ComputerName`. That never uses WinRM. Its own name in any form also stays local: the NetBIOS name, the full DNS host name, the FQDN, `localhost` or `.`. This matters for host names longer than 15 characters, whose `$env:COMPUTERNAME` is truncated. Only other computers are reached over WinRM.
+
 | Check | Audit expectation |
 |---|---|
 | Computer in the target OU; `gpresult` applied GPOs | **Audit GPO only** |
@@ -483,6 +485,9 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | Steps 0 / 1: **FAIL** *user-profile rules* | A FilePath rule names `C:\Users\<name>`: it works for one user only and carries that name into every enclave | On the reference device, run the `Remove-CIPolicyRule` command the row prints (or remove the rule in the Wizard), then run the step again |
 | Steps 0 / 5: **WARN** *FilePath folder … is writable by …* | Standard users can write to a FilePath rule's folder, so Windows ignores the rule | Remove that write access in the image (§3.1), or allow those files by publisher or hash |
 | Step 5: **WARN** *manifest has no FilePathRules* | The published package was built before this check | Build and publish a new pair: `1_GPO_build_packages.ps1` → `2_GPO_create_gpos.ps1` |
+| Step 5: **FAIL** *Unexpected error: The parameter is incorrect.* (scripts before 2026-11-02) | `Get-WinEvent` throws this for an event source that isn't registered. `WDAC-GPO` exists only after `Deploy-WDACPolicy.ps1` has run on that computer. | Update the scripts. Step 5 now reports it as the WARN below and finishes all other checks. |
+| Step 5: **WARN** *event source WDAC-GPO is not registered* | The GPO startup script or task hasn't run on that computer yet | `gpupdate /target:computer /force` on it, wait ~2 minutes, run step 5 again |
+| Step 5: **FAIL** *WinRM cannot process the request … Cannot find the computer* | The name isn't reachable over WinRM (DNS, WinRM not enabled), or it is this computer under a name the script doesn't recognise | On the endpoint itself, run step 5 **without** `-ComputerName`. That never uses WinRM. |
 
 ---
 
@@ -496,7 +501,7 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | `2_GPO_create_gpos.ps1` | `-PackagePath` (`Packages\latest.txt`) · `-TargetOU` · `-AuditGpoName` · `-EnforceGpoName` · `-TaskIntervalHours` · `-NoConfirm` |
 | `3_GPO_set_mode.ps1` | **`-Mode Audit\|Enforce\|None`** · `-GpUpdate` (this computer) · `-TargetOU` · GPO names · `-NoConfirm` |
 | `4_GPO_validate_gpos.ps1` | `-TargetOU` · GPO names |
-| `5_GPO_validate_endpoint.ps1` | `-ComputerName` (this computer) · `-ExpectedMode` (from the enabled link) · `-BlockTestPattern` (`''`) · `-TargetOU` · GPO names |
+| `5_GPO_validate_endpoint.ps1` | `-ComputerName` (this computer, checked locally without WinRM; other names use WinRM) · `-ExpectedMode` (from the enabled link) · `-BlockTestPattern` (`''`) · `-TargetOU` · GPO names |
 | `6_GPO_rollback.ps1` | **`-Action DisableLinks\|RemovePolicy\|RemoveGpos`** · `-ComputerName` · `-Force` · `-NoConfirm` · `-WhatIf` |
 | `Deploy-WDACPolicy.ps1` *(endpoint, run by the GPO)* | `-Mode Audit\|Enforce` · `-PayloadPath` (its own folder) · `-NoConfirm` (always passed by the GPO) |
 | `WDAC-Confirm.ps1` *(helper, dot-sourced)* | `Confirm-WdacChange`: the yellow Y/N prompt used by steps 2, 3 and 6. Identical to `C:\WDAC\config\scripts\WDAC-Confirm.ps1`. |
