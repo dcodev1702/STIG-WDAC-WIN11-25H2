@@ -41,6 +41,7 @@ try {
         $OU = Resolve-WdacTargetOU $Cfg $Domain
         $OuObj = Get-ADOrganizationalUnit -Identity $OU -Server $Domain.PDC -ErrorAction Stop
         Add-WdacResult $R 'OK' 'Target OU' "$($OuObj.Name) - $OU (from $($Cfg.TargetOUFrom))"
+        Add-WdacResult $R 'OK' 'GPO names' (Format-WdacGpoNames $Cfg)
         $Members = @(Get-ADComputer -SearchBase $OU -Filter * -Properties OperatingSystem, OperatingSystemVersion -Server $Domain.PDC)
         foreach ($C in $Members) {
             $Status = if ($C.OperatingSystem -match 'Windows 1[01] (Enterprise|Education|Pro)') { 'OK' } else { 'WARN' }
@@ -51,7 +52,8 @@ try {
         Add-WdacResult $R 'OK' 'GPOs linked to OU' $(if ($Links) { $Links -join '; ' } else { '(none)' })
     }
     catch { Add-WdacResult $R 'FAIL' 'Target OU' $(if ($OU) { "$OU : $($_.Exception.Message)" } else { $_.Exception.Message }) }
-    foreach ($Name in $Cfg.AuditGpoName, $Cfg.EnforceGpoName) {
+    if (-not $Cfg.AuditGpoName -or -not $Cfg.EnforceGpoName) { Add-WdacResult $R 'FAIL' 'GPO names' 'empty in GPO-Settings.psd1, and the target OU they are named after could not be resolved (row above)' }
+    foreach ($Name in @($Cfg.AuditGpoName, $Cfg.EnforceGpoName | Where-Object { $_ })) {
         $G = Get-GPO -Name $Name -Server $Domain.PDC -ErrorAction SilentlyContinue
         Add-WdacResult $R 'OK' "GPO '$Name'" $(if ($G) { "exists ({$($G.Id)}) - 2_GPO_create_gpos.ps1 will UPDATE it" } else { 'does not exist yet - 2_GPO_create_gpos.ps1 will create it' })
     }

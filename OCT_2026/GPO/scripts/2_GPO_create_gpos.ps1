@@ -39,7 +39,7 @@ try {
         if (-not (Test-Path -LiteralPath $Latest)) { throw 'STOP: no package yet. Run 1_GPO_build_packages.ps1 first.' }
         $PackagePath = (Get-Content -LiteralPath $Latest -Raw).Trim()
     }
-    Add-WdacResult $R 'OK' 'Inputs' "package $PackagePath | OU $OU ($($Cfg.TargetOUFrom)) | PDC $($Domain.PDC) | task every $($Cfg.TaskIntervalHours) h"
+    Add-WdacResult $R 'OK' 'Inputs' "package $PackagePath | OU $OU ($($Cfg.TargetOUFrom)) | PDC $($Domain.PDC) | task every $($Cfg.TaskIntervalHours) h | GPOs $(Format-WdacGpoNames $Cfg)"
 
     # Confirm before anything in the domain changes: the OU's enabled WDAC GPO delivers the new version to every device in it
     $Plan = foreach ($Mode in 'Audit', 'Enforce') {
@@ -50,6 +50,7 @@ try {
     $OnNow = @((Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | Where-Object { $_.Enabled -and $_.DisplayName -in $Cfg.AuditGpoName, $Cfg.EnforceGpoName } | ForEach-Object { $_.DisplayName })
     Confirm-WdacChange -NoConfirm:$NoConfirm -Action "publish $($Plan -join ' / ') to '$($Cfg.AuditGpoName)' and '$($Cfg.EnforceGpoName)'" -Detail @(
         "Target OU: $OU - from $($Cfg.TargetOUFrom) (links that do not exist yet are created DISABLED)",
+        "GPO names: $(Format-WdacGpoNames $Cfg) - a GPO that does not exist yet is created",
         $(if ($OnNow) { "Enabled link now: $($OnNow -join ', '). Its devices apply the new version at the next policy refresh, at boot, or within $($Cfg.TaskIntervalHours) h." } else { 'No WDAC link is enabled: nothing reaches a device until 3_GPO_set_mode.ps1 enables one.' })
     )
 

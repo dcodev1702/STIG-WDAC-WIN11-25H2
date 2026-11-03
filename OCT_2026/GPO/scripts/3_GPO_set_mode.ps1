@@ -28,7 +28,7 @@ try {
     foreach ($M in 'Audit', 'Enforce') {
         $Name = if ($M -eq 'Audit') { $Cfg.AuditGpoName } else { $Cfg.EnforceGpoName }
         $G = Get-GPO -Name $Name -Server $Domain.PDC -ErrorAction SilentlyContinue
-        if (-not $G) { throw "STOP: GPO '$Name' does not exist. Run 2_GPO_create_gpos.ps1 first." }
+        if (-not $G) { throw "STOP: GPO '$Name' (from $($Cfg.GpoNameFrom["${M}GpoName"])) does not exist. Run 2_GPO_create_gpos.ps1 first, with the same GPO-Settings.psd1 and target OU. Nothing was changed." }
         $Paths = Get-WdacGpoPaths $G.Id $Domain
         $Man[$M] = Read-WdacManifest (Join-Path $Paths.SysvolPdc $Paths.PayloadRel)
         $Link = (Get-GPInheritance -Target $OU -Server $Domain.PDC).GpoLinks | Where-Object { $_.DisplayName -eq $Name }
@@ -43,7 +43,7 @@ try {
     $Now = if ($Before.Audit -and $Before.Enforce) { 'both links enabled' } elseif ($Before.Audit) { 'Audit' } elseif ($Before.Enforce) { 'Enforce' } else { 'None' }
     if ($Now -ne $Mode) {
         Confirm-WdacChange -NoConfirm:$NoConfirm -Action "switch $OU from mode '$Now' to mode '$Mode'" -Detail @(
-            "Target OU from $($Cfg.TargetOUFrom)",
+            "Target OU from $($Cfg.TargetOUFrom); GPOs $(Format-WdacGpoNames $Cfg)",
             $(switch ($Mode) {
                 'Audit' { "Audit link ENABLED (package v$VA), Enforce link disabled. Devices log what would be blocked (Event 3076); nothing is blocked." }
                 'Enforce' { "Enforce link ENABLED (package v$VE), Audit link disabled. Devices BLOCK every file the policy does not allow (Event 3077)." }

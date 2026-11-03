@@ -10,10 +10,10 @@
 #   1. Kit: hashes, one GUID, modes, Audit-Merged = Enforce except Audit Mode, every XML compiles, no user-profile rule.
 #   2. Helpers: portability gate, OU-in-domain check, GPO paths per domain, FilePath folder check.
 #   3. Steps 0, 1, 2, 4, 3 (and the new step 5 rows) run unchanged in two domains with different names and OUs: identical policy
-#      content, each domain's own SYSVOL paths and OU links only. The target OU comes from this computer's account in one domain
-#      (TargetOU empty) and from the settings file in the other (computer in another OU); -TargetOU typed without quotes works.
-#      A TargetOU of the other domain or a container, empty or identical GPO names, a publish without confirmation and a policy
-#      with a user-profile rule are refused with nothing changed.
+#      content, each domain's own SYSVOL paths and OU links only. In one domain TargetOU and the GPO names are empty: the OU is
+#      this computer's and the GPOs are named after it. In the other both are set in the settings file (computer in another OU)
+#      and win. -TargetOU typed without quotes works. A TargetOU of the other domain or a container, identical GPO names, a
+#      publish without confirmation and a policy with a user-profile rule are refused with nothing changed.
 # Results: console table + <WorkRoot>\Test-WdacGpoPortability.csv, transcript next to it; exit 1 on any FAIL.
 param(
     [string]$KitPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'policy'),
@@ -129,6 +129,13 @@ try {
         $Msg = try { [void](Resolve-WdacTargetOU @{ TargetOU = $Bad } $Dom2); '(accepted)' } catch { $_.Exception.Message }
         Assert-That ($Msg -like 'STOP: target OU*is not in domain enclave2.example*') 'OU outside the domain refused' "$Bad -> $Msg"
     }
+    # GPO names: a set name wins, an empty one is named after the target OU (escaped characters unescaped), a clash stops
+    $C = @{ AuditGpoName = ''; EnforceGpoName = ''; GpoNameFrom = @{} }; Resolve-WdacGpoNames $C 'OU=Ops\, Tier0,OU=PAWs,DC=enclave2,DC=example'
+    Assert-That ($C.AuditGpoName -eq 'Ops, Tier0 - AppControl Audit' -and $C.EnforceGpoName -eq 'Ops, Tier0 - AppControl Enforce' -and $C.GpoNameFrom.AuditGpoName -eq "the name of OU 'Ops, Tier0'") 'GPO names derived from the OU' (Format-WdacGpoNames $C)
+    $C = @{ AuditGpoName = 'Set Audit'; EnforceGpoName = ''; GpoNameFrom = @{ AuditGpoName = 'GPO-Settings.psd1' } }; Resolve-WdacGpoNames $C 'OU=PAWs,DC=enclave2,DC=example'
+    Assert-That ($C.AuditGpoName -eq 'Set Audit' -and $C.EnforceGpoName -eq 'PAWs - AppControl Enforce') 'GPO name set in the settings wins' (Format-WdacGpoNames $C)
+    $Msg = try { Resolve-WdacGpoNames @{ AuditGpoName = 'PAWs - AppControl Enforce'; EnforceGpoName = '' } 'OU=PAWs,DC=enclave2,DC=example'; '(accepted)' } catch { $_.Exception.Message }
+    Assert-That ($Msg -like 'STOP: AuditGpoName and EnforceGpoName are both*') 'GPO name clash refused' $Msg
     $P = Get-WdacGpoPaths '11111111-2222-3333-4444-555555555555' $Dom2
     Assert-That ($P.SysvolDomain -eq '\\enclave2.example\SysVol\enclave2.example\Policies\{11111111-2222-3333-4444-555555555555}' -and $P.SysvolPdc -like '\\dc01.enclave2.example\SYSVOL\enclave2.example\Policies\*' -and $P.AdPath -like '*,CN=Policies,CN=System,DC=enclave2,DC=example') 'GPO paths follow the domain' "$($P.SysvolDomain) | $($P.AdPath)"
     $NegRule = Join-Path $WorkRoot 'negative-user-profile-rule.xml'
@@ -149,8 +156,6 @@ try {
 
     # ------------------------------------------------------------ 3. two simulated enclaves
     $Settings = Import-PowerShellDataFile -LiteralPath (Join-Path $ScriptsPath 'GPO-Settings.psd1')
-    # GPO names left empty in GPO-Settings.psd1: the simulated enclaves use test names
-    foreach ($Key in 'AuditGpoName', 'EnforceGpoName') { if (-not "$($Settings[$Key])".Trim()) { $Settings[$Key] = 'WDAC-PORTABILITY-TEST - AppControl ' + ($Key -replace 'GpoName$', '') } }
     $RealOU = Get-WdacComputerOU
     $BuildDomain = Get-WdacDomainInfo   # the real domain of this computer, read before the stand-ins exist
     $RealBefore = Get-WdacRealState $RealOU
@@ -246,28 +251,25 @@ try {
     }
     Add-TestResult 'OK' 'Stand-ins in place' "$($Guarded.Count) AD / Group Policy / identity commands resolve to in-memory stand-ins"
 
-    # GPO names empty or identical: every step stops before it creates a folder, a log or anything else
-    $Blank = Join-Path $WorkRoot 'scripts-blank-gpo-names'; $BlankGpoRoot = Join-Path $WorkRoot 'blank-gpo-root'
+    # The same GPO name for Audit and Enforce stops every step before it creates a folder, a log or anything else
+    $Blank = Join-Path $WorkRoot 'scripts-same-gpo-names'; $BlankGpoRoot = Join-Path $WorkRoot 'same-gpo-root'
     New-Item -Path $Blank -ItemType Directory -Force | Out-Null
     Get-ChildItem -LiteralPath $ScriptsPath -File | Copy-Item -Destination $Blank -Force
-    @('@{', "    TargetOU = ''", "    AuditGpoName = ''", "    EnforceGpoName = ''", "    PolicyNamePrefix = 'PAW-WDAC-GPO'", "    WdacRoot = '$(Join-Path $WorkRoot 'blank-wdac')'", "    GpoRoot = '$BlankGpoRoot'", '}') | Set-Content -LiteralPath (Join-Path $Blank 'GPO-Settings.psd1') -Encoding ASCII
-    foreach ($Case in @(
-            @{ Step = '0_GPO_pre-flight.ps1'; Args = @{}; Want = 'STOP: AuditGpoName is empty*' },
-            @{ Step = '1_GPO_build_packages.ps1'; Args = @{}; Want = 'STOP: AuditGpoName is empty*' },
-            @{ Step = '2_GPO_create_gpos.ps1'; Args = @{ NoConfirm = $true }; Want = 'STOP: AuditGpoName is empty*' },
-            @{ Step = '2_GPO_create_gpos.ps1'; Args = @{ AuditGpoName = 'Same Name'; EnforceGpoName = 'Same Name'; NoConfirm = $true }; Want = 'STOP: AuditGpoName and EnforceGpoName are both*' })) {
-        $A = $Case.Args
-        $Msg = try { & (Join-Path $Blank $Case.Step) @A *>&1 | Out-Null; '(did not stop)' } catch { $_.Exception.Message }
-        Assert-That ($Msg -like $Case.Want -and -not (Test-Path -LiteralPath $BlankGpoRoot)) "GPO names: $($Case.Step) $(@($A.Keys | Where-Object { $_ -ne 'NoConfirm' }) -join ' ')".TrimEnd() "$Msg | nothing created: $(-not (Test-Path -LiteralPath $BlankGpoRoot))"
+    @('@{', "    TargetOU = ''", "    AuditGpoName = 'Same Name'", "    EnforceGpoName = 'Same Name'", "    PolicyNamePrefix = 'PAW-WDAC-GPO'", "    WdacRoot = '$(Join-Path $WorkRoot 'same-wdac')'", "    GpoRoot = '$BlankGpoRoot'", '}') | Set-Content -LiteralPath (Join-Path $Blank 'GPO-Settings.psd1') -Encoding ASCII
+    foreach ($Step in '0_GPO_pre-flight.ps1', '1_GPO_build_packages.ps1', '2_GPO_create_gpos.ps1') {
+        $Msg = try { & (Join-Path $Blank $Step) *>&1 | Out-Null; '(did not stop)' } catch { $_.Exception.Message }
+        Assert-That ($Msg -like 'STOP: AuditGpoName and EnforceGpoName are both*' -and -not (Test-Path -LiteralPath $BlankGpoRoot)) "Same GPO names: $Step stops" "$Msg | nothing created: $(-not (Test-Path -LiteralPath $BlankGpoRoot))"
     }
 
-    # enclave2: TargetOU empty, this computer's account sits in the PAW OU (auto-detected). enclave3: TargetOU set in the settings
-    # file, this computer's account sits in ANOTHER OU (the setting wins).
+    # enclave2: TargetOU and GPO names empty - the OU is this computer's, the GPOs are named after it. enclave3: TargetOU and GPO
+    # names set in the settings file while this computer's account sits in ANOTHER OU - the settings win.
     $Enclaves = @(
         [pscustomobject]@{ Key = 'enclave2'; DnsRoot = 'enclave2.example'; NetBIOS = 'ENCLAVE2'; DN = 'DC=enclave2,DC=example'; OU = 'OU=PAW Workstations,DC=enclave2,DC=example'
-                           SettingsOU = ''; ComputerOU = 'OU=PAW Workstations,DC=enclave2,DC=example'; From = 'auto-detected: OU of this computer' },
+                           SettingsOU = ''; ComputerOU = 'OU=PAW Workstations,DC=enclave2,DC=example'; From = 'auto-detected: OU of this computer'
+                           SettingsGpo = @{ Audit = ''; Enforce = '' }; Gpo = @{ Audit = 'PAW Workstations - AppControl Audit'; Enforce = 'PAW Workstations - AppControl Enforce' }; GpoFrom = "the name of OU 'PAW Workstations'" },
         [pscustomobject]@{ Key = 'enclave3'; DnsRoot = 'ops.enclave3.mil'; NetBIOS = 'ENC3OPS'; DN = 'DC=ops,DC=enclave3,DC=mil'; OU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil'
-                           SettingsOU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil'; ComputerOU = 'OU=Build Servers,DC=ops,DC=enclave3,DC=mil'; From = 'TargetOU in GPO-Settings.psd1' }
+                           SettingsOU = 'OU=Tier0,OU=PAWs,OU=Admin,DC=ops,DC=enclave3,DC=mil'; ComputerOU = 'OU=Build Servers,DC=ops,DC=enclave3,DC=mil'; From = 'TargetOU in GPO-Settings.psd1'
+                           SettingsGpo = @{ Audit = 'ENC3 PAW - AppControl Audit'; Enforce = 'ENC3 PAW - AppControl Enforce' }; Gpo = @{ Audit = 'ENC3 PAW - AppControl Audit'; Enforce = 'ENC3 PAW - AppControl Enforce' }; GpoFrom = 'GPO-Settings.psd1' }
     )
     $Q = { param($Value) "'" + ("$Value" -replace "'", "''") + "'" }
     $Built = @{}
@@ -282,8 +284,8 @@ try {
         @(
             '@{'
             "    TargetOU          = $(& $Q $E.SettingsOU)"
-            "    AuditGpoName      = $(& $Q $Settings['AuditGpoName'])"
-            "    EnforceGpoName    = $(& $Q $Settings['EnforceGpoName'])"
+            "    AuditGpoName      = $(& $Q $E.SettingsGpo.Audit)"
+            "    EnforceGpoName    = $(& $Q $E.SettingsGpo.Enforce)"
             "    PolicyNamePrefix  = $(& $Q $Settings['PolicyNamePrefix'])"
             "    TaskIntervalHours = $([int]$Settings['TaskIntervalHours'])"
             "    WdacRoot          = $(& $Q (Join-Path $Root 'WDAC'))"
@@ -298,7 +300,7 @@ try {
             Gpos = @{}; Ad = @{}; Registry = @{}
             Links = New-Object System.Collections.Generic.List[object]; Calls = New-Object System.Collections.Generic.List[string]
         }
-        Add-TestResult 'OK' "$K setup" "domain $($E.DnsRoot) ($($E.NetBIOS)), target OU $($E.OU), settings TargetOU '$($E.SettingsOU)', this computer's account in $($E.ComputerOU), kit copied to $Src"
+        Add-TestResult 'OK' "$K setup" "domain $($E.DnsRoot) ($($E.NetBIOS)), target OU $($E.OU), settings TargetOU '$($E.SettingsOU)' and GPO names '$($E.SettingsGpo.Audit)' / '$($E.SettingsGpo.Enforce)', this computer's account in $($E.ComputerOU), kit copied to $Src"
 
         # step 0: pre-flight in this domain, then with the OTHER enclave's OU
         $S0 = Invoke-WdacStep (Join-Path $Scr '0_GPO_pre-flight.ps1')
@@ -307,6 +309,8 @@ try {
         Assert-That ("$($Row.Detail)" -like "$($E.DnsRoot) ($($E.NetBIOS))*") "$K step 0 domain read from AD" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'Target OU' } | Select-Object -First 1
         Assert-That ($Row.Status -eq 'OK' -and "$($Row.Detail)" -like "* - $($E.OU) (from $($E.From)*") "$K step 0 target OU ($($E.From))" "$($Row.Detail)"
+        $Row = $S0.Rows | Where-Object { $_.Check -eq 'GPO names' } | Select-Object -First 1
+        Assert-That ($Row.Status -eq 'OK' -and "$($Row.Detail)" -eq "'$($E.Gpo.Audit)' / '$($E.Gpo.Enforce)' (from $($E.GpoFrom))") "$K step 0 GPO names ($($E.GpoFrom))" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'Base-Enforce.xml portability' } | Select-Object -First 1
         Assert-That ($Row.Status -eq 'OK') "$K step 0 portability gate" "$($Row.Detail)"
         $Row = $S0.Rows | Where-Object { $_.Check -eq 'This device FilePath folders' } | Select-Object -First 1
@@ -347,10 +351,10 @@ try {
         $S2 = Invoke-WdacStep (Join-Path $Scr '2_GPO_create_gpos.ps1') @{ NoConfirm = $true }
         Assert-That ($S2.ExitCode -eq 0 -and -not (Format-Fails $S2)) "$K step 2 publish" "exit $($S2.ExitCode); $($Global:WdacSim.Calls.Count) simulated AD/GPO change(s)$(if (Format-Fails $S2) { '; FAIL: ' + (Format-Fails $S2) })"
         $Row = $S2.Rows | Where-Object { $_.Check -eq 'Inputs' } | Select-Object -First 1
-        Assert-That ("$($Row.Detail)" -like "*| OU $($E.OU) ($($E.From)*") "$K step 2 target OU ($($E.From))" "$($Row.Detail)"
+        Assert-That ("$($Row.Detail)" -like "*| OU $($E.OU) ($($E.From)*" -and "$($Row.Detail)" -like "*| GPOs '$($E.Gpo.Audit)' / '$($E.Gpo.Enforce)' (from $($E.GpoFrom))") "$K step 2 target OU and GPO names" "$($Row.Detail)"
         $Me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         foreach ($Mode in 'Audit', 'Enforce') {
-            $Name = $Settings["${Mode}GpoName"]
+            $Name = $E.Gpo[$Mode]
             $G = $Global:WdacSim.Gpos[$Name]
             if (-not $G) { Assert-That $false "$K step 2 $Mode GPO" "'$Name' was not created"; continue }
             $Id = '{' + $G.Id.ToString().ToUpper() + '}'
@@ -385,7 +389,7 @@ try {
         foreach ($Mode in 'Audit', 'Enforce') {
             $S3 = Invoke-WdacStep (Join-Path $Scr '3_GPO_set_mode.ps1') @{ Mode = $Mode; NoConfirm = $true }
             $On = @($Global:WdacSim.Links | Where-Object { $_.Enabled } | ForEach-Object { $_.DisplayName })
-            Assert-That ($S3.ExitCode -eq 0 -and $On.Count -eq 1 -and $On[0] -eq $Settings["${Mode}GpoName"]) "$K step 3 mode $Mode" "exit $($S3.ExitCode), enabled link: $($On -join ', ')$(if (Format-Fails $S3) { '; FAIL: ' + (Format-Fails $S3) })"
+            Assert-That ($S3.ExitCode -eq 0 -and $On.Count -eq 1 -and $On[0] -eq $E.Gpo[$Mode]) "$K step 3 mode $Mode" "exit $($S3.ExitCode), enabled link: $($On -join ', ')$(if (Format-Fails $S3) { '; FAIL: ' + (Format-Fails $S3) })"
             $S4 = Invoke-WdacStep (Join-Path $Scr '4_GPO_validate_gpos.ps1')
             $Row = $S4.Rows | Where-Object { $_.Check -eq 'Active mode for the OU' } | Select-Object -First 1
             Assert-That ($S4.ExitCode -eq 0 -and $Row.Detail -eq $Mode) "$K step 4 validate ($Mode)" "exit $($S4.ExitCode), active mode $($Row.Detail)$(if (Format-Fails $S4) { '; FAIL: ' + (Format-Fails $S4) })"

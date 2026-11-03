@@ -26,13 +26,14 @@ function Initialize-WdacGpo([string]$ScriptName, [hashtable]$Overrides = @{}, [s
     # -TargetOU is [string[]] in every step: a DN typed without quotes (-TargetOU OU=PAWs,DC=corp,DC=mil) arrives split at its commas.
     $Cfg.TargetOUFrom = if ("$($Cfg.TargetOU)".Trim()) { 'TargetOU in GPO-Settings.psd1' } else { '' }
     if ($Overrides.TargetOU) { $Overrides.TargetOU = (@($Overrides.TargetOU) | ForEach-Object { "$_".Trim() }) -join ','; $Cfg.TargetOUFrom = '-TargetOU parameter' }
-    foreach ($Key in @($Overrides.Keys)) { if ($Overrides[$Key]) { $Cfg[$Key] = $Overrides[$Key] } }
-    # Both GPO names are required and must differ
+    # Where each GPO name comes from; an empty one is named after the target OU later (Resolve-WdacGpoNames)
+    $Cfg.GpoNameFrom = @{}
     foreach ($Key in 'AuditGpoName', 'EnforceGpoName') {
-        if (-not "$($Cfg[$Key])".Trim()) { throw "STOP: $Key is empty. Set AuditGpoName and EnforceGpoName in $SettingsFile to the names of this enclave's two WDAC GPOs, for example 'PAW-WDAC - AppControl Audit' and 'PAW-WDAC - AppControl Enforce'. Nothing was changed." }
+        $Cfg.GpoNameFrom[$Key] = if ($Overrides[$Key]) { "-$Key parameter" } elseif ("$($Cfg[$Key])".Trim()) { 'GPO-Settings.psd1' } else { '' }
     }
-    if ("$($Cfg.AuditGpoName)".Trim() -eq "$($Cfg.EnforceGpoName)".Trim()) { throw "STOP: AuditGpoName and EnforceGpoName are both '$($Cfg.AuditGpoName)' - the Audit and Enforce GPOs need different names. Nothing was changed." }
-    foreach ($Key in 'AuditGpoName', 'EnforceGpoName', 'PolicyNamePrefix', 'WdacRoot', 'GpoRoot') { if (-not $Cfg[$Key]) { throw "STOP: setting '$Key' is empty (GPO-Settings.psd1)." } }
+    foreach ($Key in @($Overrides.Keys)) { if ($Overrides[$Key]) { $Cfg[$Key] = $Overrides[$Key] } }
+    if ("$($Cfg.AuditGpoName)".Trim() -and "$($Cfg.AuditGpoName)".Trim() -eq "$($Cfg.EnforceGpoName)".Trim()) { throw "STOP: AuditGpoName and EnforceGpoName are both '$($Cfg.AuditGpoName)' - the Audit and Enforce GPOs need different names. Nothing was changed." }
+    foreach ($Key in 'PolicyNamePrefix', 'WdacRoot', 'GpoRoot') { if (-not $Cfg[$Key]) { throw "STOP: setting '$Key' is empty (GPO-Settings.psd1)." } }
     if (-not $Cfg.TaskIntervalHours) { $Cfg.TaskIntervalHours = 4 }
     $Cfg.LogDir = Join-Path $Cfg.GpoRoot 'Logs'
     $Cfg.PackageRoot = Join-Path $Cfg.GpoRoot 'Packages'
@@ -61,6 +62,7 @@ function Get-WdacComputerOU([string]$ComputerName = $env:COMPUTERNAME, $Domain) 
 # Target OU: -TargetOU, else TargetOU in GPO-Settings.psd1, else the OU that holds this computer's account; $Cfg.TargetOUFrom
 # says which, for the output. An OU of another domain (for example a settings file copied from another enclave) or a container
 # that cannot hold GPO links (CN=Computers) stops here, before anything is read from or written to the wrong place.
+# Then fills in any empty GPO name from that OU (Resolve-WdacGpoNames).
 function Resolve-WdacTargetOU($Cfg, $Domain) {
     $OU = "$($Cfg.TargetOU)".Trim()
     if (-not $OU) { $OU = Get-WdacComputerOU $env:COMPUTERNAME $Domain; $Cfg.TargetOUFrom = "auto-detected: OU of this computer $env:COMPUTERNAME" }
@@ -74,7 +76,27 @@ function Resolve-WdacTargetOU($Cfg, $Domain) {
     if ($OU -notmatch '^(?i)OU=') {
         throw "STOP: target '$OU'$From is not an organizational unit - GPOs cannot be linked to a container such as CN=Computers. Move the computer accounts into an OU and set TargetOU to it (or move this computer there and leave TargetOU empty). Nothing was changed."
     }
+    Resolve-WdacGpoNames $Cfg $OU
     return $OU
+}
+
+# GPO names: one set in GPO-Settings.psd1 or by -AuditGpoName / -EnforceGpoName wins; an empty one is named after the target OU,
+# '<OU name> - AppControl Audit' / '<OU name> - AppControl Enforce'. $Cfg.GpoNameFrom says which, for the output.
+function Resolve-WdacGpoNames($Cfg, [string]$OU) {
+    if (-not $Cfg.GpoNameFrom) { $Cfg.GpoNameFrom = @{} }
+    $OuName = [regex]::Match($OU, '^(?i)OU=((?:\\.|[^,])+)').Groups[1].Value -replace '\\(.)', '$1'
+    foreach ($Mode in 'Audit', 'Enforce') {
+        $Key = "${Mode}GpoName"
+        if (-not "$($Cfg[$Key])".Trim()) { $Cfg[$Key] = "$OuName - AppControl $Mode"; $Cfg.GpoNameFrom[$Key] = "the name of OU '$OuName'" }
+    }
+    if ("$($Cfg.AuditGpoName)".Trim() -eq "$($Cfg.EnforceGpoName)".Trim()) { throw "STOP: AuditGpoName and EnforceGpoName are both '$($Cfg.AuditGpoName)' - the Audit and Enforce GPOs need different names. Nothing was changed." }
+}
+
+# The two GPO names with their source, for the output
+function Format-WdacGpoNames($Cfg) {
+    $F = if ($Cfg.GpoNameFrom) { $Cfg.GpoNameFrom } else { @{} }
+    if ($F.AuditGpoName -eq $F.EnforceGpoName) { "'$($Cfg.AuditGpoName)' / '$($Cfg.EnforceGpoName)' (from $($F.AuditGpoName))" }
+    else { "'$($Cfg.AuditGpoName)' (from $($F.AuditGpoName)) / '$($Cfg.EnforceGpoName)' (from $($F.EnforceGpoName))" }
 }
 
 # True when a -ComputerName value means THIS computer, which is then checked in-process, never over WinRM: its NetBIOS name
@@ -137,6 +159,7 @@ function Get-WdacPublishedPayloads($Cfg) {
     try {
         Import-WdacModule GroupPolicy; Import-WdacModule ActiveDirectory
         $Domain = Get-WdacDomainInfo
+        if (-not $Cfg.AuditGpoName -or -not $Cfg.EnforceGpoName) { [void](Resolve-WdacTargetOU $Cfg $Domain) }   # names an empty GPO name after the target OU
         foreach ($Name in $Cfg.AuditGpoName, $Cfg.EnforceGpoName) {
             $G = Get-GPO -Name $Name -Server $Domain.PDC -ErrorAction SilentlyContinue
             if ($G) { $P = Get-WdacGpoPaths $G.Id $Domain; Join-Path $P.SysvolPdc $P.PayloadRel }

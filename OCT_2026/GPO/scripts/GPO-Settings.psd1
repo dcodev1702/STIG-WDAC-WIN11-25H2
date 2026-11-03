@@ -3,7 +3,8 @@
     # Target OU (distinguished name). Leave empty to use the OU of the computer that runs the scripts.
     TargetOU          = ''
 
-    # The two GPOs. Both are linked to the target OU; only one link is enabled at a time (3_GPO_set_mode.ps1).
+    # The two GPOs. Leave empty to name them after the target OU ('<OU name> - AppControl Audit' / '<OU name> - AppControl Enforce');
+    # a name set here wins. Both are linked to the target OU; only one link is enabled at a time (3_GPO_set_mode.ps1).
     AuditGpoName      = ''
     EnforceGpoName    = ''
 

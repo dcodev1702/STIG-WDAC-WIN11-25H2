@@ -87,13 +87,13 @@
 
 ## 3. Settings
 
-Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once per enclave. Any script parameter with the same name overrides it. The repo copy is a template: **`AuditGpoName` and `EnforceGpoName` are empty, and every step stops until you set both.**
+Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once per enclave. Any script parameter with the same name overrides it. The repo copy leaves `TargetOU` and both GPO names empty, so they come from the OU of the computer you run the scripts on: run them on a PAW in the target OU and nothing needs editing.
 
 | Setting | Proven value | Meaning |
 |---|---|---|
 | `TargetOU` | `''` | Distinguished name of the target OU. **Empty = the OU of the computer running the scripts**, read from its computer account on the PDC emulator of its own domain. It must be an OU of that domain; one from another domain, or a container such as `CN=Computers`, stops every step with nothing changed. |
-| `AuditGpoName` | `''`, **required** | Name of this enclave's Audit GPO, for example `PAW-WDAC - AppControl Audit`. Empty stops every step. |
-| `EnforceGpoName` | `''`, **required** | Name of this enclave's Enforce GPO, for example `PAW-WDAC - AppControl Enforce`. Must differ from `AuditGpoName`. |
+| `AuditGpoName` | `''` | Audit GPO name. **Empty = named after the target OU: `<OU name> - AppControl Audit`.** A name set here, or with `-AuditGpoName`, wins. |
+| `EnforceGpoName` | `''` | Enforce GPO name. **Empty = `<OU name> - AppControl Enforce`.** A name set here, or with `-EnforceGpoName`, wins. It must differ from the Audit name. |
 | `PolicyNamePrefix` | `PAW-WDAC-GPO` | Friendly name stamped into the packages, e.g. `PAW-WDAC-GPO-Enforce` in CiTool and Event 3099 |
 | `TaskIntervalHours` | `4` | The endpoint task re-runs every N hours. It also runs about 1 minute after Group Policy (re)creates it. |
 | `WdacRoot` | `C:\WDAC` | The reference device's working folders (config README layout) |
@@ -103,6 +103,13 @@ Edit **`C:\WDAC\GPO\scripts\GPO-Settings.psd1`** once per enclave. Any script pa
 > If the reference device is **not** in the target OU, set `TargetOU` explicitly. Otherwise the GPOs are linked to the reference device's own OU.
 
 The target OU comes from the first of these that is set: **`-TargetOU`** on the command line, then **`TargetOU` in `GPO-Settings.psd1`**, then **the OU of this computer**. A `TargetOU` left in the settings file therefore wins over the computer's own OU. Steps 0, 2 and 3 print the OU with its source (`-TargetOU parameter`, `TargetOU in GPO-Settings.psd1`, or `auto-detected: OU of this computer <name>`), and steps 2 and 3 show it again in the yellow Y/N prompt, so check it there before you answer **Y**. `-TargetOU` works with or without quotes; quote it when an OU name contains a space.
+
+The GPO names follow the same rule: a name set in the settings file or on the command line wins, and an empty one is built from the target OU's name. For example, OU `PAW Workstations` gets `PAW Workstations - AppControl Audit` and `PAW Workstations - AppControl Enforce`. Steps 0, 2 and 3 show the names with their source. Because the names follow the OU, run every step with the same settings and target OU:
+
+- **Different OU:** steps run from a PAW in another OU, or after the OU is renamed, look for differently named GPOs. Step 2 would then create a second pair.
+- **Same OU name twice:** two OUs with the same name in one domain get the same GPO names, so they share one GPO pair.
+
+To keep the names fixed, set them in `GPO-Settings.psd1`.
 
 ### 3.1 One Policy Kit, Several Enclaves (Domains and OUs)
 
@@ -129,7 +136,7 @@ The policy holds rules, options and one GUID. It names no domain, OU, computer o
    }
    ```
 
-2. Edit `GPO-Settings.psd1` for that enclave. Set `TargetOU` to the enclave's PAW OU, or leave it empty when the reference device sits in that OU. Set `AuditGpoName` and `EnforceGpoName` to this enclave's GPO names (required; the repo copy leaves them empty). Nothing else is domain-specific: the scripts read the domain, its PDC emulator and SYSVOL from Active Directory at run time.
+2. Edit `GPO-Settings.psd1` for that enclave. Set `TargetOU` to the enclave's PAW OU, or leave it empty when the reference device sits in that OU. Leave `AuditGpoName` and `EnforceGpoName` empty to name the GPOs after the target OU, or set them to fixed names. Nothing else is domain-specific: the scripts read the domain, its PDC emulator and SYSVOL from Active Directory at run time.
 3. Run the normal order (§4): `0` → `1` → `2` → `4` → `3 -Mode Audit` → `5` → audit period → `3 -Mode Enforce` → `5`.
 
 **Guards that keep it portable:**
@@ -500,7 +507,8 @@ Use this on one device in the target OU (ideally the reference device) before yo
 | Step 4 **FAIL** *version AD/SYSVOL* differ | Replication in progress, or a manual SYSVOL edit | Wait for replication; re-run `2_GPO_create_gpos.ps1` |
 | Unexpected **3077** under Enforce | An app was missing from the reference policy | Fix on the reference device → `1_` → `2_` (§10.1), or demote (§10.2) |
 | Any step: **STOP** *"target OU … is not in domain …"* | `TargetOU` belongs to another domain, for example a settings file copied from another enclave | Set `TargetOU` to an OU of this domain, or leave it empty when the reference device is in the target OU (§3.1) |
-| Any step: **STOP** *"AuditGpoName is empty"* or *"… are both '…'"* | `AuditGpoName` or `EnforceGpoName` is empty in `GPO-Settings.psd1` (the repo copy ships them empty), or both names are the same | Set both to the enclave's two (different) GPO names |
+| Any step: **STOP** *"AuditGpoName and EnforceGpoName are both '…'"* | Both names are the same, or a name set in the settings file equals the other name built from the OU | Give the Audit and Enforce GPOs different names, or leave both empty |
+| Step 3: **STOP** *"GPO '…' (from the name of OU '…') does not exist"* | The GPO names are built from the target OU, and this run's OU differs from step 2's (another PAW, another `TargetOU`, a renamed OU) | Run with the same target OU as step 2, or set the GPO names in `GPO-Settings.psd1` |
 | Step 2 picked an OU you didn't expect | The source in brackets says why. *TargetOU in GPO-Settings.psd1*: a value left in the settings file wins over the computer's own OU. *auto-detected*: the computer account was read on the PDC emulator, so a computer moved on another DC moments ago may not have replicated there yet. | Answer **N**. Clear `TargetOU` in the settings file or pass `-TargetOU`. After a move, wait for replication, then run step 2 again. |
 | Any step: **STOP** *"target OU 'OU=x DC=y DC=z' is not in domain …"* (scripts before 2026-11-02) | `-TargetOU` typed without quotes reached the script split at its commas | Update the scripts (they now accept it), or put the DN in quotes |
 | Steps 0, 2 – 6: **STOP** *"… is not an organizational unit"* | The target is a container, such as `CN=Computers`, which can't have GPO links | Move the computer accounts into an OU and set `TargetOU` to it |
