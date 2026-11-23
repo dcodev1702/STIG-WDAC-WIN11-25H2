@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WDAC GPO How-To</title>
+<style>
+:root{--bg:#f3f5fb;--panel:#fff;--ink:#141824;--muted:#5b6475;--line:#e2e7f0;--soft:#f7f9fd;--accent:#2563eb;
+--prep:#2563eb;--build:#7c3aed;--publish:#db2777;--audit:#d97706;--enforce:#16a34a;--verify:#0891b2;--ops:#475569;--stig:#dc2626;
+--ok:#15803d;--ok-bg:#dcfce7;--bad:#b91c1c;--bad-bg:#fee2e2;--warn:#a16207;--warn-bg:#fef3c7;--info:#1d4ed8;--info-bg:#dbeafe;
+--code-bg:#edf1f8;--term:#0f172a;--term-ink:#e2e8f0;--term-line:#1f2a44;--th:#f0f3fa;
+--shadow:0 1px 2px rgba(16,24,40,.05),0 10px 30px -14px rgba(16,24,40,.22)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0a0e16;--panel:#121826;--ink:#e7eaf2;--muted:#9aa4b6;--line:#24304a;--soft:#0f1522;--accent:#60a5fa;
+--prep:#60a5fa;--build:#a78bfa;--publish:#f472b6;--audit:#fbbf24;--enforce:#4ade80;--verify:#22d3ee;--ops:#94a3b8;--stig:#f87171;
+--ok:#4ade80;--ok-bg:#12331f;--bad:#fca5a5;--bad-bg:#3b1518;--warn:#fcd34d;--warn-bg:#3a2c0b;--info:#93c5fd;--info-bg:#132a4a;
+--code-bg:#1a2234;--term:#070b13;--term-ink:#e2e8f0;--term-line:#1f2a44;--th:#172034;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.7)}}
+:root[data-theme="dark"]{--bg:#0a0e16;--panel:#121826;--ink:#e7eaf2;--muted:#9aa4b6;--line:#24304a;--soft:#0f1522;--accent:#60a5fa;
+--prep:#60a5fa;--build:#a78bfa;--publish:#f472b6;--audit:#fbbf24;--enforce:#4ade80;--verify:#22d3ee;--ops:#94a3b8;--stig:#f87171;
+--ok:#4ade80;--ok-bg:#12331f;--bad:#fca5a5;--bad-bg:#3b1518;--warn:#fcd34d;--warn-bg:#3a2c0b;--info:#93c5fd;--info-bg:#132a4a;
+--code-bg:#1a2234;--term:#070b13;--term-ink:#e2e8f0;--term-line:#1f2a44;--th:#172034;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.7)}
+.p-prep{--p:var(--prep)}.p-build{--p:var(--build)}.p-publish{--p:var(--publish)}.p-audit{--p:var(--audit)}.p-enforce{--p:var(--enforce)}.p-verify{--p:var(--verify)}.p-ops{--p:var(--ops)}.p-stig{--p:var(--stig)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+background-image:radial-gradient(1200px 500px at 100% -10%,color-mix(in srgb,var(--build) 10%,transparent),transparent),radial-gradient(900px 420px at -10% 0%,color-mix(in srgb,var(--prep) 10%,transparent),transparent);background-attachment:fixed}
+.wrap{max-width:1140px;margin:0 auto;padding:28px 16px 72px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px 24px;margin-bottom:22px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+section[class*="p-"]::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:linear-gradient(90deg,var(--p),color-mix(in srgb,var(--p) 30%,transparent))}
+h1{font-size:34px;line-height:1.18;margin:0 0 12px;letter-spacing:-.01em}h2{font-size:21px;margin:2px 0 12px;display:flex;align-items:center;gap:10px}
+h3{font-size:17px;margin:22px 0 8px;color:var(--p,var(--ink))}h4{font-size:15px;margin:16px 0 6px}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}.muted,.sub{color:var(--muted)}.sub{font-size:13px}
+.chip{display:inline-grid;place-items:center;min-width:32px;height:32px;padding:0 8px;border-radius:10px;font-size:14px;font-weight:700;color:#fff;
+background:linear-gradient(135deg,var(--p,var(--accent)),color-mix(in srgb,var(--p,var(--accent)) 55%,#000));box-shadow:0 4px 12px -4px color-mix(in srgb,var(--p,var(--accent)) 70%,transparent)}
+/* hero */
+header.hero{position:relative;overflow:hidden;border-radius:22px;padding:34px 30px 26px;margin-bottom:18px;color:#fff;
+background:linear-gradient(125deg,#1e3a8a 0%,#4338ca 32%,#7c3aed 58%,#0e7490 100%);box-shadow:0 20px 50px -22px rgba(67,56,202,.65)}
+header.hero::before,header.hero::after{content:"";position:absolute;border-radius:50%;filter:blur(6px);opacity:.35;pointer-events:none}
+header.hero::before{width:420px;height:420px;right:-120px;top:-180px;background:radial-gradient(circle,#22d3ee,transparent 65%)}
+header.hero::after{width:360px;height:360px;left:-140px;bottom:-200px;background:radial-gradient(circle,#f472b6,transparent 65%)}
+header.hero>*{position:relative;z-index:1}
+.hero .eyebrow{color:rgba(255,255,255,.82);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px;font-weight:600}
+.hero p.lead{color:rgba(255,255,255,.92);font-size:16px;max-width:900px;margin:0}
+.hero code{background:rgba(255,255,255,.16);color:#fff}
+.hero .tags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.hero .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28)}
+.hero .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:22px}
+.hero .card{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.24);border-radius:14px;padding:14px 16px;backdrop-filter:blur(8px)}
+.hero .card .k{color:rgba(255,255,255,.78);font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;margin:0 0 4px;font-weight:600}
+.hero .card .v{font-size:19px;font-weight:700;margin:0;line-height:1.25}.hero .card .d{font-size:13px;color:rgba(255,255,255,.82);margin:6px 0 0}
+/* journey */
+.journey{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:0 0 22px}
+.journey a.node{position:relative;display:block;text-decoration:none;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 12px 12px 14px;box-shadow:var(--shadow);transition:transform .15s,border-color .15s}
+.journey a.node:hover{transform:translateY(-2px);border-color:var(--p)}
+.journey a.node::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 4px 4px 0;background:var(--p)}
+.journey .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--p);color:#fff;font-weight:700;font-size:13px;margin-bottom:6px}
+.journey b{display:block;font-size:14px;line-height:1.25}.journey small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+/* badges */
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:12.5px;white-space:nowrap}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}.badge.bad{background:var(--bad-bg);color:var(--bad)}.badge.warn{background:var(--warn-bg);color:var(--warn)}.badge.info{background:var(--info-bg);color:var(--info)}
+/* code */
+code{font-family:"Cascadia Code","Cascadia Mono",Consolas,monospace;font-size:12.5px;background:var(--code-bg);padding:1px 6px;border-radius:6px;word-break:break-word}
+pre{position:relative;border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.55;margin:8px 0 14px}
+pre code{background:none;padding:0;white-space:pre;color:inherit}
+pre:not(.out){background:var(--term);color:var(--term-ink);border:1px solid var(--term-line);padding-top:34px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+pre:not(.out)::before{content:"";position:absolute;left:14px;top:13px;width:9px;height:9px;border-radius:50%;background:#f87171;box-shadow:14px 0 0 #fbbf24,28px 0 0 #4ade80}
+pre:not(.out)::after{content:"PowerShell";position:absolute;left:58px;top:7px;font:600 11px "Segoe UI",sans-serif;letter-spacing:.04em;color:#7c8aa5}
+pre.out{background:var(--soft);border:1px dashed color-mix(in srgb,var(--p,var(--accent)) 45%,var(--line));color:var(--ink)}
+pre.out::before{content:"EXAMPLE OUTPUT";position:absolute;top:7px;right:12px;font:700 10.5px "Segoe UI",sans-serif;letter-spacing:.08em;color:var(--p,var(--muted))}
+.copy{position:absolute;top:6px;right:8px;font:600 11.5px "Segoe UI",sans-serif;padding:3px 10px;border-radius:7px;border:1px solid #2b3a5c;background:#16213a;color:#cbd5e1;cursor:pointer}
+.copy:hover{background:#1e2c4d;color:#fff}
+/* tables */
+.tw{overflow-x:auto;margin:10px 0 14px;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{background:var(--th);font-weight:600;white-space:nowrap}
+tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--soft) 70%,transparent)}tbody tr:last-child td{border-bottom:none}td:first-child code{white-space:nowrap;word-break:normal}
+/* callouts */
+.note{--n:var(--accent);background:color-mix(in srgb,var(--n) 9%,var(--panel));border:1px solid color-mix(in srgb,var(--n) 28%,transparent);border-left:5px solid var(--n);padding:11px 15px;border-radius:12px;margin:14px 0}
+.note.warn{--n:var(--audit)}.note.ok{--n:var(--enforce)}.note.bad{--n:var(--stig)}
+.note b.t{display:block;margin-bottom:3px;color:var(--n)}
+/* step cards */
+.step{--p:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:18px;margin:0 0 22px;overflow:hidden;box-shadow:var(--shadow);border-left:6px solid var(--p)}
+.step>.sh{display:flex;gap:14px;align-items:center;padding:16px 22px;background:linear-gradient(90deg,color-mix(in srgb,var(--p) 16%,var(--panel)),var(--panel) 70%);border-bottom:1px solid var(--line)}
+.step>.sh .num{flex:0 0 auto;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-weight:800;font-size:19px;color:#fff;
+background:linear-gradient(135deg,var(--p),color-mix(in srgb,var(--p) 55%,#000));box-shadow:0 8px 18px -8px color-mix(in srgb,var(--p) 80%,transparent)}
+.step>.sh h2{margin:0;font-size:19px}.step>.sh .ph{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--p)}
+.step>.sh .where{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;padding:4px 10px;border-radius:999px;background:var(--soft);border:1px solid var(--line)}
+.step>.sb{padding:4px 22px 18px}
+.lbl{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--p,var(--muted));margin:16px 0 4px}
+.lbl::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--p,var(--muted))}
+/* flow + misc */
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:12px 0}
+.flow .box{flex:1 1 150px;border:1px solid var(--line);border-top:4px solid var(--p,var(--accent));border-radius:12px;padding:10px 12px;background:var(--soft);font-size:13px}
+.flow .box b{display:block;font-size:13.5px;margin-bottom:2px;color:var(--p,var(--ink))}.flow .arr{align-self:center;color:var(--muted);font-weight:700;font-size:18px}
+ul.check{list-style:none;padding-left:0;margin:0}ul.check li{padding:9px 4px;border-bottom:1px dashed var(--line)}ul.check li:last-child{border-bottom:none}
+ul.check label{display:flex;gap:12px;align-items:flex-start;cursor:pointer}ul.check input{margin-top:4px;width:18px;height:18px;accent-color:var(--enforce)}
+nav section{padding-bottom:16px}nav ol{columns:2;column-gap:36px;margin:6px 0 0;padding-left:22px}nav li{break-inside:avoid;padding:2px 0}nav li::marker{color:var(--muted);font-weight:600}
+nav a{text-decoration:none}nav a:hover{text-decoration:underline}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:6px}
+.rcard{border:1px solid var(--line);border-top:4px solid var(--p);border-radius:14px;padding:12px 16px;background:var(--soft)}
+.rcard h4{margin:4px 0 8px;color:var(--p)}.rcard ul{margin:0;padding-left:18px}.rcard li{margin:5px 0}.rcard li span{display:block;color:var(--muted);font-size:12.5px;line-height:1.4}
+a.top{position:fixed;right:18px;bottom:18px;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;text-decoration:none;font-size:18px;font-weight:700;color:#fff;
+background:linear-gradient(135deg,#4338ca,#0e7490);box-shadow:0 10px 24px -10px rgba(67,56,202,.8);z-index:5}
+footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:8px}
+@media (max-width:900px){.journey{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:640px){.journey{grid-template-columns:repeat(2,1fr)}nav ol{columns:1}.step>.sh .where{display:none}h1{font-size:27px}header.hero{padding:26px 18px 20px}}
+@media print{body{background:#fff}header.hero{box-shadow:none}.copy,a.top{display:none}.step,section{box-shadow:none;break-inside:avoid-page}}
+</style></head>
+<body><div class="wrap">
+
+<header class="hero" id="top">
+<p class="eyebrow">How-to guide &middot; App Control for Business (WDAC) &middot; Group Policy &middot; Windows 11 PAWs</p>
+<div class="tags"><span class="tag">&#128737; Microsoft Windows PAW STIG</span><span class="tag">V-243450 &middot; WPAW-00-001050</span><span class="tag">V-243451 &middot; WPAW-00-001060</span><span class="tag">CAT II</span><span class="tag">OCT_2026/GPO scripts 0&ndash;6</span></div>
+<h1>Deploy App Control with two GPOs: Audit first, then Enforce</h1>
+<p class="lead">This guide takes you from an approved App Control base policy to an <b>Enforce GPO that is linked and enabled</b> on your PAW OU. It uses the scripts in <code>OCT_2026/GPO/scripts</code> (steps 0 to 6). Each step tells you what to run, what it does, what you should see when it finishes, and what to do if you see something else. When you finish, the PAWs enforce App Control in both kernel and user mode, and both App Control checks of the <b>Microsoft Windows PAW STIG</b> are <b>Not a Finding</b>.</p>
+<div class="cards">
+<div class="card"><p class="k">STIG</p><p class="v">Microsoft Windows PAW STIG</p><p class="d">Privileged Access Workstation, V3R3</p></div>
+<div class="card"><p class="k">Closes</p><p class="v">V-243450 &middot; V-243451</p><p class="d">STIG IDs WPAW-00-001050 &middot; WPAW-00-001060 (both CAT II)</p></div>
+<div class="card"><p class="k">End state</p><p class="v">Enforce GPO linked + enabled</p><p class="d">Audit GPO linked, link disabled. Win32_DeviceGuard 2 / 2</p></div>
+<div class="card"><p class="k">You run everything on</p><p class="v">One reference device</p><p class="d">A domain-joined Windows 11 PAW with RSAT, elevated PowerShell</p></div>
+</div>
+</header>
+<div class="journey">
+<a class="node p-prep" href="#prereq"><span class="n">1</span><b>Prepare</b><small>prereqs &middot; policy &middot; settings</small></a>
+<a class="node p-build" href="#s0"><span class="n">2</span><b>Pre-flight + build</b><small>steps 0 &middot; 1</small></a>
+<a class="node p-publish" href="#s2"><span class="n">3</span><b>Publish GPOs</b><small>steps 2 &middot; 4</small></a>
+<a class="node p-audit" href="#s3a"><span class="n">4</span><b>Audit</b><small>steps 3 &middot; 5 &middot; review</small></a>
+<a class="node p-enforce" href="#s3e"><span class="n">5</span><b>Enforce</b><small>steps 3 &middot; 5</small></a>
+<a class="node p-verify" href="#reboot"><span class="n">6</span><b>Verify + sign off</b><small>reboot &middot; STIG &middot; checklist</small></a>
+</div>
+
+<nav><section><h2>Contents</h2><ol>
+<li><a href="#stig">The STIG requirements this satisfies</a></li>
+<li><a href="#how">How the solution works (read once)</a></li>
+<li><a href="#prereq">Prerequisites</a></li>
+<li><a href="#prep">Prepare the reference device</a></li>
+<li><a href="#settings">Configure GPO-Settings.psd1</a></li>
+<li><a href="#s0">Step 0: Pre-flight</a></li>
+<li><a href="#s1">Step 1: Build the packages</a></li>
+<li><a href="#s2">Step 2: Create the GPOs</a></li>
+<li><a href="#s4a">Step 4: Validate the GPOs</a></li>
+<li><a href="#s3a">Step 3: Switch the OU to Audit</a></li>
+<li><a href="#s5a">Step 5: Validate the endpoints (Audit)</a></li>
+<li><a href="#audit">The audit period</a></li>
+<li><a href="#s3e">Step 3: Switch the OU to Enforce</a></li>
+<li><a href="#s5e">Step 5: Validate the endpoints (Enforce)</a></li>
+<li><a href="#reboot">Prove it survives a reboot + STIG check</a></li>
+<li><a href="#signoff">End-state sign-off checklist</a></li>
+<li><a href="#ops">Day-2 operations</a></li>
+<li><a href="#rollback">Rollback and removal (step 6)</a></li>
+<li><a href="#trouble">Troubleshooting</a></li>
+<li><a href="#ref">Reference</a></li>
+<li><a href="#resources">Resources</a></li>
+</ol></section></nav>
+
+<!-- ============================================================ STIG -->
+<section id="stig" class="p-stig"><h2><span class="chip">1</span>The STIG requirements this satisfies</h2>
+<p>Both requirements come from the <b>Microsoft Windows Privileged Access Workstation (PAW) STIG</b>. Each needs an App Control (formerly WDAC, Device Guard code integrity) policy that is <b>enforced</b> on the PAW. They are checked separately: kernel mode and user mode must each read <b>2</b>.</p>
+<div class="tw"><table><thead><tr><th>Vuln ID</th><th>STIG ID</th><th>Severity</th><th>Requirement</th><th>What is checked</th><th>Passes when</th></tr></thead><tbody>
+<tr><td><b>V-243450</b></td><td><code>WPAW-00-001050</code></td><td>CAT II</td><td><b>Device Guard Code Integrity Policy</b>: the PAW must have an App Control code integrity policy deployed and active to restrict which applications can run.</td><td><code>Win32_DeviceGuard</code> &rarr; <code>CodeIntegrityPolicyEnforcementStatus</code> (kernel mode)</td><td><b>2</b> (Enforced)</td></tr>
+<tr><td><b>V-243451</b></td><td><code>WPAW-00-001060</code></td><td>CAT II</td><td><b>Device Guard User Mode Code Integrity (UMCI)</b>: the same requirement, verified separately for user mode. UMCI must be enforced, not just kernel mode.</td><td><code>Win32_DeviceGuard</code> &rarr; <code>UsermodeCodeIntegrityPolicyEnforcementStatus</code> (user mode)</td><td><b>2</b> (Enforced)</td></tr>
+</tbody></table></div>
+<p><b>Values:</b> <code>0</code> = Not configured (finding) &middot; <code>1</code> = Audit (still a finding) &middot; <code>2</code> = Enforced (Not a Finding).</p>
+<h4>The official check (run it on the PAW in an elevated PowerShell)</h4>
+<pre><code>Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
+    Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus</code></pre>
+<div class="tw"><table><thead><tr><th>Stage of this guide</th><th>V-243450 (kernel)</th><th>V-243451 (user mode)</th></tr></thead><tbody>
+<tr><td>Before you start (no organization policy)</td><td>often already <b>2</b>: Windows' built-in driver policies enforce kernel mode</td><td>0 or 1: <span class="badge bad">finding</span></td></tr>
+<tr><td>After the Audit GPO (steps 3&ndash;5, Audit)</td><td>2 <span class="badge ok">Not a Finding</span></td><td>1 = Audit: <span class="badge warn">finding, expected during the audit period</span></td></tr>
+<tr><td><b>After the Enforce GPO (end state)</b></td><td><b>2</b> <span class="badge ok">Not a Finding</span></td><td><b>2</b> <span class="badge ok">Not a Finding</span></td></tr>
+</tbody></table></div>
+<p class="sub">Step 5 prints this STIG check for every endpoint it validates. The value is only meaningful from an <b>elevated</b> session.</p>
+</section>
+
+<!-- ============================================================ HOW -->
+<section id="how" class="p-prep"><h2><span class="chip">2</span>How the solution works (read this once)</h2>
+<div class="flow">
+<div class="box p-prep"><b>Reference device</b>Your approved policy <code>Base-Enforce.xml</code> + <code>PolicyGuid.txt</code></div><div class="arr">&rarr;</div>
+<div class="box p-build"><b>Step 1: build</b>Two compiled packages from the same XML: <b>Audit vN</b> and <b>Enforce vN+1</b></div><div class="arr">&rarr;</div>
+<div class="box p-publish"><b>Step 2: two GPOs</b>Packages copied to each GPO's SYSVOL folder; both linked to the OU, <b>links disabled</b></div><div class="arr">&rarr;</div>
+<div class="box p-audit"><b>Step 3: one link on</b>Audit first, then Enforce. Never both.</div><div class="arr">&rarr;</div>
+<div class="box p-verify"><b>Endpoints</b>A startup script + scheduled task (SYSTEM) deploy the <code>{GUID}.cip</code> with <code>CiTool</code></div>
+</div>
+<div class="tw"><table><thead><tr><th>Design rule</th><th>Why it matters to you</th></tr></thead><tbody>
+<tr><td>Both packages carry the <b>same policy GUID</b></td><td>Enforce <b>replaces</b> Audit in place. There's never a second base policy.</td></tr>
+<tr><td><b>Enforce version = Audit version + 1</b></td><td>Switching Audit &rarr; Enforce is just a link switch. <b>No reboot needed.</b></td></tr>
+<tr><td>Endpoints <b>never downgrade</b></td><td>Going back from Enforce to Audit needs a <i>new</i>, higher-versioned pair (<a href="#ops">Day-2</a>). Flipping the link back alone does nothing.</td></tr>
+<tr><td>Only <b>one link enabled</b> at a time</td><td>Step 3 disables before it enables; step 4 fails if both are on.</td></tr>
+<tr><td>Disabling or deleting a GPO <b>never removes</b> the policy from devices</td><td>Removal is an explicit step (<a href="#rollback">step 6</a>).</td></tr>
+<tr><td>Versions are date-based: <code>YYYY.MM.DD.N</code></td><td>Step 1 always picks a version above every version it knows, including what's already published in both GPOs, so endpoints always accept it.</td></tr>
+<tr><td>Delivered by a <b>script inside the GPO</b>, not the built-in "Deploy App Control" setting</td><td>That built-in setting only supports the legacy single-policy format (<code>SiPolicy.p7b</code>). Multiple-policy <code>{GUID}.cip</code> files need <code>CiTool</code>, which runs as SYSTEM from the GPO.</td></tr>
+</tbody></table></div>
+<div class="note warn"><b class="t">Keep the target computers out of any legacy "Deploy App Control for Business" GPO.</b>A legacy single policy and this multiple-policy base policy would both be active and would <b>intersect</b>: a file would need to pass both.</div>
+<p><b>Order of the steps</b> (the numbers are the script names; 4 runs before 3 on purpose):</p>
+<pre><code>0 pre-flight &rarr; 1 build &rarr; 2 create GPOs &rarr; 4 validate GPOs &rarr; 3 Audit &rarr; 5 validate endpoints
+   &rarr; audit period (fix gaps: 1 &rarr; 2 &rarr; 4) &rarr; 3 Enforce &rarr; 5 validate endpoints &rarr; reboot &rarr; 5 again</code></pre>
+</section>
+
+<!-- ============================================================ PREREQ -->
+<section id="prereq" class="p-prep"><h2><span class="chip">3</span>Prerequisites</h2>
+<div class="tw"><table><thead><tr><th>Where</th><th>Requirement</th><th>How to check</th></tr></thead><tbody>
+<tr><td><b>Reference device</b></td><td>A domain-joined <b>Windows 11 Enterprise 22H2 or later</b> PAW, ideally <b>in the target OU</b>, from the same image as the PAWs. RSAT <b>Group Policy</b> + <b>Active Directory</b> tools. The <b>ConfigCI</b> module is built in.</td><td><code>Get-Module -ListAvailable GroupPolicy, ActiveDirectory, ConfigCI</code></td></tr>
+<tr><td><b>Your account</b></td><td><b>Domain Admins</b>, or <b>Group Policy Creator Owners</b> plus <i>Link GPOs</i> on the target OU</td><td><code>whoami /groups</code></td></tr>
+<tr><td><b>Endpoints (PAWs)</b></td><td>Windows 11 Enterprise <b>22H2+</b> (needs <code>CiTool.exe</code>), domain-joined, <b>in the target OU</b>. SYSVOL read access is the default. WinRM is needed only if you validate them remotely.</td><td><code>Test-Path $env:SystemRoot\System32\CiTool.exe</code></td></tr>
+<tr><td><b>Scope</b></td><td>Windows <b>client</b> editions only. The endpoint script <b>skips servers and domain controllers</b>.</td><td>Keep servers out of the OU</td></tr>
+<tr><td><b>The policy</b></td><td>An approved, <b>enforced</b> base policy XML (<code>Base-Enforce.xml</code>) and its GUID in <code>PolicyGuid.txt</code>. See <a href="#prep">section 4</a>.</td><td>Checked in section 4 and by step 0</td></tr>
+<tr><td><b>Software installs</b> (recommended)</td><td>Under Enforce, only allowed code runs, <i>including installer helper DLLs</i>. Designate <b>MECM as the managed installer</b> (<code>CCMSetup.exe MANAGEDINSTALLER=1</code>), and make sure the policy has option 13 <code>Enabled:Managed Installer</code>.</td><td><code>(Get-AppLockerPolicy -Effective -Xml) -match 'Type="ManagedInstaller"'</code></td></tr>
+</tbody></table></div>
+<p>Install RSAT if it's missing (elevated):</p>
+<pre><code>dism.exe /Online /Add-Capability /CapabilityName:Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0 /CapabilityName:Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0</code></pre>
+</section>
+
+<!-- ============================================================ PREP -->
+<section id="prep" class="p-prep"><h2><span class="chip">4</span>Prepare the reference device</h2>
+<h3>4.1 Folder layout</h3>
+<pre><code>C:\WDAC\
+  Source\            Base-Enforce.xml   PolicyGuid.txt   (Base-Audit.xml optional, for reference)
+  GPO\
+    scripts\         the OCT_2026\GPO\scripts files (0_ ... 6_, Deploy-WDACPolicy.ps1, GPO-Settings.psd1, helpers)
+    Packages\        created by step 1 (one time-stamped folder per build)
+    Logs\            created by every step: transcript (.log) + PASS/WARN/FAIL table (.csv)</code></pre>
+<h3>4.2 Copy the scripts, unblock them, allow them for this session</h3>
+<pre><code># elevated PowerShell (Windows PowerShell 5.1 or PowerShell 7)
+New-Item -ItemType Directory -Force C:\WDAC\Source, C:\WDAC\GPO\scripts | Out-Null
+Copy-Item '&lt;path to repo&gt;\OCT_2026\GPO\scripts\*' C:\WDAC\GPO\scripts\ -Recurse -Force
+Get-ChildItem C:\WDAC -Recurse | Unblock-File
+Set-ExecutionPolicy -Scope Process Bypass -Force     # this window only
+Set-Location C:\WDAC\GPO\scripts</code></pre>
+<p class="sub">If PowerShell says <i>"running scripts is disabled on this system"</i>, you skipped the <code>Set-ExecutionPolicy -Scope Process</code> line. Run it in every new window.</p>
+<h3>4.3 Put the policy in place and check it</h3>
+<p>Copy your approved policy to <code>C:\WDAC\Source\Base-Enforce.xml</code>. The build in step 1 makes <b>both</b> packages from this one file: the Audit package is the same rules with Audit Mode switched on.</p>
+<pre><code>$x = [xml](Get-Content C:\WDAC\Source\Base-Enforce.xml -Raw); $o = @($x.SiPolicy.Rules.Rule.Option)
+[pscustomobject]@{
+  PolicyID = $x.SiPolicy.PolicyID; BasePolicyID = $x.SiPolicy.BasePolicyID; Type = $x.SiPolicy.PolicyType; Version = $x.SiPolicy.VersionEx
+  UMCI = ($o -contains 'Enabled:UMCI'); AuditMode = ($o -contains 'Enabled:Audit Mode'); ManagedInstaller = ($o -contains 'Enabled:Managed Installer') } | Format-List
+Get-Content C:\WDAC\Source\PolicyGuid.txt</code></pre>
+<span class="lbl">You should see</span>
+<ul>
+<li><code>PolicyID</code> = <code>BasePolicyID</code> = the GUID in <code>PolicyGuid.txt</code> (with braces), and <code>Type</code> = <code>Base Policy</code></li>
+<li><code>UMCI = True</code>: <b>required for V-243451</b>. Without option 0 <code>Enabled:UMCI</code>, user mode is never checked.</li>
+<li><code>AuditMode = False</code>: the source must be the <b>enforced</b> policy.</li>
+<li><code>ManagedInstaller = True</code>: recommended (MECM installs).</li>
+</ul>
+<span class="lbl">If not</span>
+<pre><code># PolicyGuid.txt missing: create it from the XML
+([xml](Get-Content C:\WDAC\Source\Base-Enforce.xml -Raw)).SiPolicy.PolicyID | Set-Content C:\WDAC\Source\PolicyGuid.txt -NoNewline
+# You only have an audit-mode XML (e.g. Base-Audit.xml): make the enforced copy
+Copy-Item C:\WDAC\Source\Base-Audit.xml C:\WDAC\Source\Base-Enforce.xml
+Set-RuleOption -FilePath C:\WDAC\Source\Base-Enforce.xml -Option 3 -Delete</code></pre>
+<div class="note"><b class="t">Updating policies you already deployed?</b>Keep the <b>same PolicyID</b>. Endpoints replace a policy in place only when the GUID matches, and steps 0 and 1 refuse an XML whose GUID differs from <code>PolicyGuid.txt</code>.</div>
+<div class="note warn"><b class="t">FilePath rules must point to admin-only folders.</b>Windows ignores a FilePath rule if standard users can write to its folder (runtime FilePath rule protection). Never use paths under <code>C:\Users\&lt;name&gt;\</code>: step 1's portability gate refuses them. Steps 0 and 5 warn about rule folders that are missing or user-writable.</div>
+</section>
+
+<!-- ============================================================ SETTINGS -->
+<section id="settings" class="p-prep"><h2><span class="chip">5</span>Configure <code>GPO-Settings.psd1</code></h2>
+<p>Edit <code>C:\WDAC\GPO\scripts\GPO-Settings.psd1</code> once. Every script reads it; a command-line parameter with the same name overrides it.</p>
+<div class="tw"><table><thead><tr><th>Setting</th><th>Default</th><th>Meaning</th><th>Recommendation</th></tr></thead><tbody>
+<tr><td><code>TargetOU</code></td><td><code>''</code></td><td>Distinguished name of the PAW OU. Empty = the OU of the computer running the scripts.</td><td>Set it explicitly if the reference device is <b>not</b> in the target OU.</td></tr>
+<tr><td><code>AuditGpoName</code> / <code>EnforceGpoName</code></td><td><code>''</code></td><td>Empty = <code>&lt;OU name&gt; - AppControl Audit</code> / <code>&lt;OU name&gt; - AppControl Enforce</code></td><td>Set fixed names to update the same GPOs every time (or to reuse GPOs you already have).</td></tr>
+<tr><td><code>PolicyNamePrefix</code></td><td><code>PAW-WDAC-GPO</code></td><td>Friendly name in the packages, e.g. <code>PAW-WDAC-GPO-Enforce</code> in CiTool and Event 3099</td><td>Keep it</td></tr>
+<tr><td><code>TaskIntervalHours</code></td><td><code>4</code></td><td>The endpoint task re-runs every N hours (and ~1 minute after GP creates it)</td><td>Keep it</td></tr>
+<tr><td><code>WdacRoot</code> / <code>GpoRoot</code></td><td><code>C:\WDAC</code> / <code>C:\WDAC\GPO</code></td><td>Working folders (section 4.1)</td><td>Keep them</td></tr>
+</tbody></table></div>
+<pre><code>@{
+    TargetOU          = 'OU=PAW Workstations,DC=example,DC=mil'
+    AuditGpoName      = 'PAW Workstations - AppControl Audit'
+    EnforceGpoName    = 'PAW Workstations - AppControl Enforce'
+    PolicyNamePrefix  = 'PAW-WDAC-GPO'
+    TaskIntervalHours = 4
+    WdacRoot          = 'C:\WDAC'
+    GpoRoot           = 'C:\WDAC\GPO'
+}</code></pre>
+<div class="note warn"><b class="t">Use the same settings for every step, every time.</b>GPO names follow the OU unless you set them. Running a later step from another OU, or after renaming the OU, looks for differently named GPOs, and step 2 would create a second pair.</div>
+<div class="note"><b class="t">Yes/No prompts.</b>Steps 2, 3 and 6 print in <span style="color:var(--warn)"><b>yellow</b></span> what they are about to change and ask <code>Continue? [Y/N]</code>. In a non-interactive session (remote, automation) they stop safely unless you add <code>-NoConfirm</code>.</div>
+</section>
+
+<!-- ============================================================ STEP 0 -->
+<div class="step p-build" id="s0"><div class="sh"><div class="num">0</div><div><span class="ph">Pre-flight + build &middot; step 0</span><h2>Pre-flight: prove everything is ready</h2></div><div class="where">reference device &middot; read-only</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\0_GPO_pre-flight.ps1</code></pre>
+<span class="lbl">What it does</span>
+<p>It changes nothing. It checks the session (elevated), domain membership, the GroupPolicy / ActiveDirectory / ConfigCI modules, your GPO rights, and the domain, PDC emulator and <b>SYSVOL on every DC</b>. It also checks the target OU (it must be an OU of <i>this</i> domain) and lists every computer in it. Then it verifies the policy: GUID = <code>PolicyGuid.txt</code>, base policy, <b>Audit Mode OFF</b>, Managed Installer, and no user-profile path rules. Finally it checks each FilePath rule folder on this device, the device's own active policy, <code>CiTool.exe</code>, and the version pair step 1 will build.</p>
+<span class="lbl">You should see</span>
+<pre class="out"><code>Status Check                                       Detail
+OK     Session                                     Elevated as SKYNET\lorenzo on WIN11-PAW-WDAC (PowerShell 5.1...)
+OK     Domain membership                           skynet-home.local
+OK     Module GroupPolicy                          loaded
+OK     Module ActiveDirectory                      loaded
+OK     Module ConfigCI                             loaded
+OK     GPO rights                                  SKYNET\Domain Admins
+OK     SYSVOL on DC25-1.skynet-home.local          \\DC25-1.skynet-home.local\SYSVOL\skynet-home.local\Policies reachable
+OK     Target OU                                   JMSC-WDAC-WRKSTNS - OU=JMSC-WDAC-WRKSTNS,DC=skynet-home,DC=local (from TargetOU in GPO-Settings.psd1)
+OK     GPO names                                   '... - AppControl Audit' / '... - AppControl Enforce' (from GPO-Settings.psd1)
+OK     OU member WIN11-PAW-WDAC                    Windows 11 Enterprise 10.0 (28000)
+OK     GPO '... - AppControl Audit'                does not exist yet - 2_GPO_create_gpos.ps1 will create it
+OK     Base-Enforce.xml                            Base policy {352CC1A2-...} v2026.11.22.0, Multiple Policy Format
+OK     Base-Enforce.xml mode                       Audit Mode OFF (enforced policy)
+OK     Option 13 Managed Installer                 ON (MECM / Intune)
+OK     Base-Enforce.xml portability                no rule or rule text names a user profile (C:\Users\&lt;name&gt;)
+WARN   This device FilePath folder                 C:\Program Files\SplunkUniversalForwarder (1 rule(s), ...) does not exist on this computer - the rule allows nothing here
+WARN   This device FilePath folder                 C:\admin (1 rule(s), e.g. %OSDRIVE%\admin\*) is writable by NT AUTHORITY\Authenticated Users on C:\admin ...
+OK     Next package versions                       Audit 2026.11.22.1 / Enforce 2026.11.22.2 - today 2026-11-22, counter 1
+WARN   Reference device active policy              The reference policy is not active on this device
+OK     CiTool.exe / build                          build 28000
+
+GPO pre-flight: PASSED with 10 warning(s).</code></pre>
+<p class="sub">Example outputs in this guide are from a real lab run of these scripts, trimmed (&hellip;). Your names, versions, GUIDs and warning counts will differ.</p>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>GPO pre-flight: PASSED</code></b> (warnings are allowed, FAIL is not).</li>
+<li>The <b>Target OU</b> and <b>GPO names</b> rows are what you expect. If the GPOs already exist, the rows say <b>"will UPDATE"</b>.</li>
+<li><b>Next package versions</b> shows the pair step 1 will build.</li></ul>
+<span class="lbl">Common warnings (OK to continue)</span>
+<ul><li><i>FilePath folder … does not exist on this computer</i>: the app isn't installed on the reference device. The rule still works on PAWs where it is installed.</li>
+<li><i>FilePath folder … is writable by …</i>: Windows will ignore that rule on devices with the same image, so those files will be <b>blocked</b> under Enforce. Fix the folder ACL in the image, or allow those files by publisher or hash.</li>
+<li><i>Reference policy not active / STIG 2/1</i>: normal on a first deployment.</li></ul>
+<span class="lbl">If it fails</span>
+<ul><li><i>Reference policy files: Missing …</i>: put <code>Base-Enforce.xml</code> and <code>PolicyGuid.txt</code> in <code>C:\WDAC\Source</code> (section 4.3).</li>
+<li><i>Base-Enforce.xml mode: Audit Mode is ON</i>: the source must be the enforced XML (section 4.3).</li>
+<li><i>STOP: target OU … is not in domain … / is not an organizational unit</i>: fix <code>TargetOU</code>. A container such as <code>CN=Computers</code> can't have GPO links.</li>
+<li><i>Module … / install RSAT</i>: run the <code>dism</code> command in section 3.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 1 -->
+<div class="step p-build" id="s1"><div class="sh"><div class="num">1</div><div><span class="ph">Pre-flight + build &middot; step 1</span><h2>Build the Audit and Enforce packages</h2></div><div class="where">reference device &middot; local files only</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\1_GPO_build_packages.ps1</code></pre>
+<span class="lbl">What it does</span>
+<ol><li><b>Picks versions</b>: today's <code>YYYY.MM.DD.N</code> for Audit and <code>N+1</code> for Enforce, always above every version it knows.</li>
+<li><b>Builds two copies</b> of <code>Base-Enforce.xml</code>: <i>Audit</i> (option 3 Audit Mode added) and <i>Enforce</i> (option 3 removed). Each is stamped with name <code>&lt;prefix&gt;-Audit|Enforce</code>, ID <code>GPO-AUDIT|ENFORCE-&lt;version&gt;</code> and its version.</li>
+<li><b>Gate</b>, before anything compiles: same GUID, both base policies, options differ <b>only</b> by Audit Mode, and the rule sections (EKUs, FileRules, Signers, SigningScenarios, CiSigners) are <b>byte-identical</b>. It also runs the portability check.</li>
+<li><b>Compiles</b> each into <code>C:\WDAC\GPO\Packages\&lt;stamp&gt;\Audit|Enforce\{GUID}.cip</code>, with a <code>manifest.json</code> (versions, SHA-256, FilePath rules) and a copy of <code>Deploy-WDACPolicy.ps1</code>. The exact XML behind each package is kept in <code>Packages\&lt;stamp&gt;\xml\</code>.</li></ol>
+<span class="lbl">You should see</span>
+<pre class="out"><code>OK     Version plan                      next pair 2026.11.23.3 / 2026.11.23.4 - today 2026-11-23 ...; highest known v2026.11.23.2
+OK     Audit GUID                        {352CC1A2-...} / base {352CC1A2-...} / Base Policy / v2026.11.23.3
+OK     Enforce GUID                      {352CC1A2-...} / base {352CC1A2-...} / Base Policy / v2026.11.23.4
+OK     Options differ only by Audit Mode only in Audit: Enabled:Audit Mode; only in Enforce: (none)
+OK     Identical &lt;FileRules&gt;             2576 child node(s)
+OK     Identical &lt;Signers&gt;               225 child node(s)
+OK     Identical &lt;CiSigners&gt;             7 child node(s)
+OK     Base-Enforce.xml portability      no rule or rule text names a user profile (C:\Users\&lt;name&gt;)
+OK     Audit package                     Base PAW-WDAC-GPO-Audit v2026.11.23.3 - {352CC1A2-...}.cip 323612 bytes SHA-256 B6DF35A9...
+OK     Enforce package                   Base PAW-WDAC-GPO-Enforce v2026.11.23.4 - {352CC1A2-...}.cip 323620 bytes SHA-256 A0D303BC...
+OK     Package folder                    C:\WDAC\GPO\Packages\20261123-004325 (recorded in C:\WDAC\GPO\Packages\latest.txt)
+Package build: PASSED.</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>Package build: PASSED</code></b>, with Audit vN &lt; Enforce vN+1 and the same GUID on both.</li>
+<li><code>Packages\latest.txt</code> points to the new folder (step 2 uses it).</li></ul>
+<span class="lbl">If it fails</span>
+<ul><li><i>Portability: user-profile rules</i>: remove the FilePath rule under <code>C:\Users\…</code>. The row prints the <code>Remove-CIPolicyRule</code> command.</li>
+<li><i>STOP: -AuditVersion … is not higher than …</i>: drop your explicit version and let the script choose.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 2 -->
+<div class="step p-publish" id="s2"><div class="sh"><div class="num">2</div><div><span class="ph">Publish &middot; step 2</span><h2>Create (or update) the Audit and Enforce GPOs</h2></div><div class="where">reference device &middot; changes AD + SYSVOL &middot; asks Y/N</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\2_GPO_create_gpos.ps1          # answer Y at the yellow prompt (or add -NoConfirm)</code></pre>
+<span class="lbl">What it does (for each of the two GPOs)</span>
+<div class="tw"><table><thead><tr><th>Item</th><th>What step 2 sets</th></tr></thead><tbody>
+<tr><td>GPO</td><td><b>Creates</b> it if missing, <b>updates</b> it otherwise. Updating in place is also how you publish a new policy later. Status <code>UserSettingsDisabled</code>.</td></tr>
+<tr><td>Registry</td><td><i>Always wait for the network at computer startup and logon</i> = Enabled, so the startup script has network access</td></tr>
+<tr><td>Payload</td><td><code>{GUID}.cip</code> + <code>manifest.json</code> + <code>Deploy-WDACPolicy.ps1</code> copied to <code>\\&lt;PDC&gt;\SYSVOL\&lt;domain&gt;\Policies\{GPO}\Machine\Scripts\Startup\WDAC\</code>, replacing any earlier payload</td></tr>
+<tr><td>Startup script</td><td><code>powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\\&lt;domain&gt;\SysVol\…\Deploy-WDACPolicy.ps1" -Mode &lt;Audit|Enforce&gt; -NoConfirm</code></td></tr>
+<tr><td>Scheduled task (GPP)</td><td><code>WDAC-GPO-Deploy-&lt;Mode&gt;</code> runs as SYSTEM about 1 minute after creation and then every <code>TaskIntervalHours</code>. It is <b>removed automatically</b> when the GPO no longer applies.</td></tr>
+<tr><td>Versions</td><td>Client-side extensions registered; the computer version is raised in AD and <code>GPT.INI</code> so clients pick up the change</td></tr>
+<tr><td>Link</td><td>Linked to the target OU <b>disabled</b>. An existing link is left exactly as it is.</td></tr>
+</tbody></table></div>
+<span class="lbl">You should see</span>
+<pre class="out"><code>WARNING: this changes App Control - publish Audit v2026.11.23.3 / Enforce v2026.11.23.4 to '... - AppControl Audit' and '... - AppControl Enforce'
+  No WDAC link is enabled: nothing reaches a device until 3_GPO_set_mode.ps1 enables one.
+Continue? [Y/N]: Y
+  Confirmed.
+OK     Audit GPO              created '... - AppControl Audit' {5d692c79-...}
+OK     Audit SYSVOL           \\DC25-1...\Policies\{5D692C79-...}\Machine\Scripts\Startup\WDAC &lt;- Deploy-WDACPolicy.ps1, manifest.json, {352CC1A2-...}.cip
+OK     Audit scheduled task   WDAC-GPO-Deploy-Audit - SYSTEM, at creation (+1 min) and every 4 h, removed when no longer applied
+OK     Audit link             linked to OU=... (DISABLED)
+OK     Enforce GPO            created '... - AppControl Enforce' {59bd4244-...}
+OK     Enforce link           linked to OU=... (DISABLED)
+OK     Version order          Audit v2026.11.23.3 &lt; Enforce v2026.11.23.4
+GPO create / update: PASSED.</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>GPO create / update: PASSED</code></b>. Both GPOs exist and both links are <b>DISABLED</b>, so nothing has reached any device yet.</li>
+<li>In GPMC each GPO shows <i>Scripts &rarr; Startup</i> and <i>Preferences &rarr; Scheduled Tasks</i>. The <i>wait for network</i> value may appear under <i>Extra Registry Settings</i>; it still applies.</li></ul>
+<span class="lbl">If it fails</span>
+<ul><li><i>Access is denied (Set-GPRegistryValue)</i>: usually transient (a file was in use). Re-run step 2; it is idempotent.</li>
+<li><i>needs a Y/N confirmation, but the session is non-interactive</i>: run interactively, or add <code>-NoConfirm</code>.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 4 -->
+<div class="step p-publish" id="s4a"><div class="sh"><div class="num">4</div><div><span class="ph">Publish &middot; step 4</span><h2>Validate the GPOs</h2></div><div class="where">reference device &middot; read-only</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\4_GPO_validate_gpos.ps1</code></pre>
+<span class="lbl">What it does</span>
+<p>For each GPO it checks the status, the AD vs SYSVOL version, the client-side extensions, security filtering (<i>Authenticated Users</i> GpoApply) and <i>wait for network</i>. It checks the payload and its hashes on <b>every domain controller</b>, the manifest mode, and the <code>scripts.ini</code> and scheduled-task contents (including <code>-NoConfirm</code>). Across both GPOs it checks the links, that the GUID is the same, that <b>Audit version &lt; Enforce version</b>, and the <b>active mode</b> of the OU.</p>
+<span class="lbl">You should see</span>
+<pre class="out"><code>OK     Audit version AD/SYSVOL                     2 / 2
+OK     Audit payload on DC25-1.skynet-home.local   1 policy file(s) + deploy script, hashes match: Base v2026.11.23.3
+OK     Audit scheduled task                        WDAC-GPO-Deploy-Audit runAs NT AUTHORITY\System, every PT4H + at creation, removePolicy=1
+OK     Enforce payload on DC25-1.skynet-home.local 1 policy file(s) + deploy script, hashes match: Base v2026.11.23.4
+OK     Same policy GUID                            {352CC1A2-...} / {352CC1A2-...}
+OK     Version order                               Audit v2026.11.23.3 &lt; Enforce v2026.11.23.4
+OK     Active mode for the OU                      None
+GPO validation: PASSED.</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>GPO validation: PASSED</code></b> and <b>Active mode for the OU: None</b>. Both GPOs are ready and no link is on yet.</li></ul>
+<span class="lbl">If it fails</span>
+<ul><li><i>version AD/SYSVOL differ</i> or a payload hash mismatch on a DC: SYSVOL replication is still in progress. Wait, then re-run (or re-run step 2).</li>
+<li><i>BOTH links are enabled</i>: someone edited links by hand. Use step 3 to set one mode.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 3 AUDIT -->
+<div class="step p-audit" id="s3a"><div class="sh"><div class="num">3</div><div><span class="ph">Audit &middot; step 3</span><h2>Switch the OU to Audit</h2></div><div class="where">reference device &middot; enables the Audit link &middot; asks Y/N</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\3_GPO_set_mode.ps1 -Mode Audit -GpUpdate     # -GpUpdate also refreshes policy on THIS computer</code></pre>
+<span class="lbl">What it does</span>
+<p>It enables the <b>Audit</b> link and makes sure the Enforce link is disabled (it always disables before it enables). With <code>-GpUpdate</code> it runs <code>gpupdate /target:computer /force</code> on the reference device. Other PAWs pick it up at their next background refresh (90 &plusmn; 30 minutes), at boot, or when you run <code>gpupdate /target:computer /force</code> on them. About <b>1 minute</b> after Group Policy creates the task, the task deploys the Audit policy as SYSTEM.</p>
+<span class="lbl">You should see</span>
+<pre class="out"><code>WARNING: this changes App Control - switch OU=... from mode 'None' to mode 'Audit'
+  Audit link ENABLED (package v2026.11.23.3), Enforce link disabled. Devices log what would be blocked (Event 3076); nothing is blocked.
+OK     Audit link               ... - AppControl Audit: enabled=True (was False) - package v2026.11.23.3
+OK     Enforce link             ... - AppControl Enforce: enabled=False (was False) - package v2026.11.23.4
+OK     Mode                     OU=... is now in mode 'Audit'
+OK     gpupdate (this computer) Updating policy... Computer Policy update has completed successfully.
+Set mode Audit: PASSED.</code></pre>
+<span class="lbl">Then, on a PAW (about 1 to 2 minutes later)</span>
+<pre><code>CiTool.exe -lp | Select-String 'PAW-WDAC-GPO' -Context 0,6       # the Audit policy is listed and active
+Get-Content C:\Windows\Logs\WDAC-GPO\Deploy-WDACPolicy.log -Tail 2</code></pre>
+<pre class="out"><code>[INFO] [Audit] PAW-WDAC-GPO-Audit {352cc1a2-...}: deployed v2026.11.23.3 (Audit), was not active; CiTool now reports v2026.11.23.3, IsAuthorized True.
+       ... run as NT AUTHORITY\SYSTEM from \\&lt;domain&gt;\SysVol\&lt;domain&gt;\Policies\{GPO}\Machine\Scripts\Startup\WDAC
+[INFO] [Audit] Win32_DeviceGuard V-243450 kernel = 2 (ENFORCING), V-243451 user = 1 (AUDIT) (expected user 1 (AUDIT) for Audit).</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>Set mode Audit: PASSED</code></b>, and on the PAW the deploy log says <b>deployed v… (Audit)</b>. No reboot is needed.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 5 AUDIT -->
+<div class="step p-audit" id="s5a"><div class="sh"><div class="num">5</div><div><span class="ph">Audit &middot; step 5</span><h2>Validate the endpoints (Audit)</h2></div><div class="where">reference device &rarr; PAWs &middot; read-only</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\5_GPO_validate_endpoint.ps1                                    # this computer (no WinRM)
+.\5_GPO_validate_endpoint.ps1 -ComputerName PAW01, PAW02         # other PAWs, over WinRM</code></pre>
+<span class="lbl">What it does</span>
+<p>Per computer, it checks: in the target OU; <code>gpresult</code> applied GPOs (<b>Audit GPO only</b>); the scheduled task and its last result; the last deployment (<code>state.json</code>, deploy log); CiTool (the GUID active at the <b>Audit package version</b> and authorized); Event 3099; <code>Win32_DeviceGuard</code>; 3076/3077 counts since deployment; and every FilePath rule folder from the published manifest (admin-only?). It ends with the <b>STIG check</b>.</p>
+<span class="lbl">You should see</span>
+<pre class="out"><code>OK     PAW01 applied GPOs                     ...; ... - AppControl Audit; Default Domain Policy
+OK     PAW01 scheduled task                   WDAC-GPO-Deploy-Audit Ready, last run ... result 0
+OK     PAW01 active policy                    PAW-WDAC-GPO-Audit {352cc1a2-...} v2026.11.23.3 active=True authorized=True (GPO package v2026.11.23.3)
+OK     PAW01 Event 3099                       Refreshed and activated Code Integrity policy {352cc1a2-...} PAW-WDAC-GPO-Audit. id GPO-AUDIT-2026.11.23.3. Status 0x0
+OK     PAW01 Win32_DeviceGuard                V-243450 kernel 2 (ENFORCING) / V-243451 user 1 (AUDIT) - user mode 1 (AUDIT) expected in Audit mode
+Endpoint validation (Audit): PASSED with N warning(s).
+STIG check on PAW01 (Win32_DeviceGuard):
+  V-243450 kernel-mode code integrity  2 (ENFORCING)  COMPLIANT
+  V-243451 user-mode code integrity    1 (AUDIT)  AUDIT - logs only, not compliant until Enforce</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>Endpoint validation (Audit): PASSED</code></b>, with the Audit policy active and authorized.</li>
+<li>STIG shows <b>V-243451 = 1 (AUDIT)</b>. That is <b>expected</b>: it stays a finding until you enforce.</li></ul>
+<span class="lbl">If something is wrong</span>
+<ul><li><i>WDAC-GPO-Deploy-Audit not present</i>: the PAW hasn't refreshed yet. Run <code>gpupdate /target:computer /force</code> on it and wait about 2 minutes.</li>
+<li><i>Applied GPOs missing the WDAC GPO</i>: the computer isn't in the OU, the link is disabled, or security filtering excludes it.</li>
+<li><i>WinRM … Cannot find the computer</i>: run step 5 on the PAW itself without <code>-ComputerName</code>.</li></ul>
+</div></div>
+
+<!-- ============================================================ AUDIT PERIOD -->
+<section id="audit" class="p-audit"><h2><span class="chip">12</span>The audit period: find what Enforce would block</h2>
+<p>In Audit nothing is blocked; Windows logs <b>Event 3076</b> for every file the policy <i>would</i> block. Let users run <b>every</b> application and workflow for a full work cycle: logon (CAC/smart card), browsers, admin tools, agents (EDR, SIEM, scanners), printing and VPN.</p>
+<h4>Review what would be blocked</h4>
+<pre><code># on a PAW (or wrap in Invoke-Command -ComputerName PAW01 { ... })
+$since = (Get-Date).AddDays(-7)
+Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076; StartTime = $since } |
+  ForEach-Object { $d = @{}; ([xml]$_.ToXml()).Event.EventData.Data | ForEach-Object { $d[$_.Name] = $_.'#text' }
+    [pscustomobject]@{ File = ($d['File Name'] -replace '^\\Device\\HarddiskVolume\d+', 'C:'); Process = ($d['Process Name'] -replace '.*\\', '')
+                       Policy = $d['PolicyName']; UserWriteable = $d['UserWriteable'] } } |
+  Group-Object File | Sort-Object Count -Descending | Select-Object Count, Name</code></pre>
+<div class="tw"><table><thead><tr><th>You find…</th><th>Do this</th></tr></thead><tbody>
+<tr><td>An approved app is flagged</td><td>Add a rule to <code>Base-Enforce.xml</code>, keeping the same PolicyID. Prefer a <b>publisher</b> rule for signed code; a <b>FilePath</b> rule only for admin-only install folders (check <code>UserWriteable = false</code> in the event); a hash rule as a last resort. Then <b>republish</b>: <code>1 &rarr; 2 &rarr; 4</code>. PAWs in Audit move to the new, higher Audit version on their own.</td></tr>
+<tr><td>Something that should never run</td><td>Nothing to do. Enforce will block it.</td></tr>
+<tr><td>MSI setup DLLs (<code>MSIxxxx.tmp</code> in <code>C:\Windows\Installer</code> or <code>%TEMP%</code>)</td><td>Installer helpers from manual installs. Deploy software with <b>MECM as managed installer</b>; don't allow these by path.</td></tr>
+<tr><td>A file blocked by an explicit <b>deny</b> rule (3089 VerificationError 26)</td><td>Deny rules always win over allow rules. Allowing the file means removing the deny rule, which is a security decision; document it.</td></tr>
+</tbody></table></div>
+<div class="note ok"><b class="t">Ready to enforce when…</b>a full work cycle produces no 3076 for anything you need. Pick an app you deliberately don't allow as your <b>known-block test</b> for step 5, for example a browser that isn't on the approved list.</div>
+</section>
+
+<!-- ============================================================ STEP 3 ENFORCE -->
+<div class="step p-enforce" id="s3e"><div class="sh"><div class="num">3</div><div><span class="ph">Enforce &middot; step 3</span><h2>Switch the OU to Enforce</h2></div><div class="where">reference device &middot; enables the Enforce link &middot; asks Y/N</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code>.\3_GPO_set_mode.ps1 -Mode Enforce -GpUpdate</code></pre>
+<span class="lbl">What it does</span>
+<p>It <b>disables the Audit link</b> and <b>enables the Enforce link</b>. At each PAW's next refresh, Group Policy removes the <code>WDAC-GPO-Deploy-Audit</code> task and creates <code>WDAC-GPO-Deploy-Enforce</code>. About a minute later that task deploys <b>Enforce vN+1 over Audit vN in place, with no reboot</b>.</p>
+<div class="note bad"><b class="t">From now on, files the policy doesn't allow are blocked.</b>Users see "Your organization used App Control for Business to block this app". In PowerShell the message is "An Application Control policy has blocked this file" (Event 3077).</div>
+<span class="lbl">You should see</span>
+<pre class="out"><code>WARNING: this changes App Control - switch OU=... from mode 'Audit' to mode 'Enforce'
+  Enforce link ENABLED (package v2026.11.23.4), Audit link disabled. Devices BLOCK every file the policy does not allow (Event 3077).
+OK     Audit link               ... - AppControl Audit: enabled=False (was True) - package v2026.11.23.3
+OK     Enforce link             ... - AppControl Enforce: enabled=True (was False) - package v2026.11.23.4
+OK     Mode                     OU=... is now in mode 'Enforce'
+OK     gpupdate (this computer) Updating policy... Computer Policy update has completed successfully.
+Set mode Enforce: PASSED.</code></pre>
+<p>On a PAW, about 1 to 2 minutes after its refresh, the deploy log shows:</p>
+<pre class="out"><code>[INFO] [Enforce] PAW-WDAC-GPO-Enforce {352cc1a2-...}: deployed v2026.11.23.4 (Enforce), was v2026.11.23.3; CiTool now reports v2026.11.23.4, IsAuthorized True.
+[INFO] [Enforce] Win32_DeviceGuard V-243450 kernel = 2 (ENFORCING), V-243451 user = 2 (ENFORCING) (expected user 2 (ENFORCING) for Enforce).</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>Set mode Enforce: PASSED</code></b>: <b>Enforce link enabled, Audit link disabled</b>.</li>
+<li>Then re-run <code>.\4_GPO_validate_gpos.ps1</code> and expect <b>Active mode for the OU: Enforce</b>.</li></ul>
+</div></div>
+
+<!-- ============================================================ STEP 5 ENFORCE -->
+<div class="step p-enforce" id="s5e"><div class="sh"><div class="num">5</div><div><span class="ph">Enforce &middot; step 5</span><h2>Validate the endpoints (Enforce) with a known block</h2></div><div class="where">reference device &rarr; PAWs &middot; read-only</div></div><div class="sb">
+<span class="lbl">Run</span>
+<pre><code># 1) on a PAW, launch your known-block app once, e.g.:
+Start-Process 'C:\Program Files\Mozilla Firefox\firefox.exe'      # expect: "An Application Control policy has blocked this file"
+# 2) validate, telling step 5 which block is expected (regex)
+.\5_GPO_validate_endpoint.ps1 -ComputerName PAW01, PAW02 -BlockTestPattern 'Mozilla|Firefox'</code></pre>
+<span class="lbl">You should see</span>
+<pre class="out"><code>OK     PAW01 applied GPOs           ...; ... - AppControl Enforce; Default Domain Policy
+OK     PAW01 scheduled task         WDAC-GPO-Deploy-Enforce Ready, last run ... result 0
+OK     PAW01 last deployment run    ... mode Enforce: Deployed; PAW-WDAC-GPO-Enforce Deployed 2026.11.23.3 -&gt; 2026.11.23.4
+OK     PAW01 active policy          PAW-WDAC-GPO-Enforce {352cc1a2-...} v2026.11.23.4 active=True authorized=True (GPO package v2026.11.23.4)
+OK     PAW01 Event 3099             Refreshed and activated Code Integrity policy {352cc1a2-...} PAW-WDAC-GPO-Enforce. id GPO-ENFORCE-2026.11.23.4. Status 0x0
+OK     PAW01 Win32_DeviceGuard      V-243450 kernel 2 (ENFORCING) / V-243451 user 2 (ENFORCING) - both PASS
+OK     PAW01 events since ...       3076 (would block) = 0, 3077 (blocked) = 2
+OK     PAW01 expected blocks        matching 'Mozilla|Firefox': C:\Program Files\Mozilla Firefox\firefox.exe &lt;- powershell.exe
+Endpoint validation (Enforce): PASSED with N warning(s).
+STIG check on PAW01 (Win32_DeviceGuard):
+  V-243450 kernel-mode code integrity  2 (ENFORCING)  COMPLIANT
+  V-243451 user-mode code integrity    2 (ENFORCING)  COMPLIANT</code></pre>
+<span class="lbl">Success criteria</span>
+<ul><li><b><code>Endpoint validation (Enforce): PASSED</code></b>, with <b>Enforce GPO only</b> applied and the Enforce version active and authorized.</li>
+<li><b>STIG 2 / 2</b>: <b>V-243450 and V-243451 COMPLIANT (Not a Finding)</b>.</li>
+<li>The only 3077s match your known-block pattern. Anything else is listed as <i>blocks to review</i>.</li>
+<li>Users confirm approved apps work, <b>including smart card / CAC logon and sign-in</b>.</li></ul>
+<span class="lbl">If you see blocks to review</span>
+<p>An approved app is missing from the policy. Fix it the same way as in the audit period (add rules &rarr; <code>1 &rarr; 2 &rarr; 4</code>). PAWs in Enforce move to the new, higher Enforce version on their own. If it's urgent, demote to Audit (<a href="#ops">Day-2</a>).</p>
+</div></div>
+
+<!-- ============================================================ REBOOT -->
+<section id="reboot" class="p-verify"><h2><span class="chip">15</span>Prove it survives a reboot, and record the STIG result</h2>
+<ol><li>Reboot one PAW, log on, and use your critical apps (for example the smart card / CAC sign-in).</li>
+<li>On the PAW, check that the startup script saw the policy:
+<pre><code>Get-Content C:\Windows\Logs\WDAC-GPO\Deploy-WDACPolicy.log -Tail 2      # "... (Enforce) is already active. run as NT AUTHORITY\SYSTEM ..."</code></pre></li>
+<li>Run the official STIG check <b>elevated</b> and save the output with your evidence:
+<pre><code>Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard |
+    Format-List CodeIntegrityPolicyEnforcementStatus, UsermodeCodeIntegrityPolicyEnforcementStatus</code></pre>
+<pre class="out"><code>CodeIntegrityPolicyEnforcementStatus         : 2
+UsermodeCodeIntegrityPolicyEnforcementStatus : 2</code></pre></li>
+<li>Re-run <code>.\5_GPO_validate_endpoint.ps1 -ComputerName &lt;PAW&gt; -BlockTestPattern '&lt;regex&gt;'</code>: still <b>PASSED</b> and <b>2 / 2</b>.</li></ol>
+<div class="note"><b class="t">Evidence to keep</b><code>C:\WDAC\GPO\Logs\*.csv</code> + <code>*.log</code> (every step), <code>C:\WDAC\GPO\Packages\&lt;stamp&gt;\</code> (the exact policy published), and the STIG check output. Also keep the endpoint deploy log <code>C:\Windows\Logs\WDAC-GPO\Deploy-WDACPolicy.log</code>. The repo's <code>OCT_2026\scripts\7_DISA_STIG_CHECK.ps1</code> prints a formatted STIG report, if you have it.</div>
+</section>
+
+<!-- ============================================================ SIGN-OFF -->
+<section id="signoff" class="p-enforce"><h2><span class="chip">16</span>End-state sign-off checklist</h2>
+<p class="sub">Tick as you verify. The ticks are saved in this browser only.</p>
+<ul class="check" id="checklist">
+<li><label><input type="checkbox" data-k="c1"><span><b>Step 4</b> on the reference device: <code>GPO validation: PASSED</code> and <b>Active mode for the OU: Enforce</b></span></label></li>
+<li><label><input type="checkbox" data-k="c2"><span>GPMC: <b>Enforce GPO linked + link enabled</b> on the PAW OU; <b>Audit GPO linked, link disabled</b>. The link's separate "Enforced" (No Override) flag isn't needed.</span></label></li>
+<li><label><input type="checkbox" data-k="c3"><span>Each PAW: <code>gpresult /scope computer /r</code> shows the <b>Enforce</b> WDAC GPO only</span></label></li>
+<li><label><input type="checkbox" data-k="c4"><span>Each PAW: CiTool shows <b>&lt;prefix&gt;-Enforce vN+1</b> active + authorized, with Event 3099 <code>Status 0x0</code></span></label></li>
+<li><label><input type="checkbox" data-k="c5"><span><b>V-243450 (WPAW-00-001050)</b>: <code>CodeIntegrityPolicyEnforcementStatus = 2</code>, <b>Not a Finding</b></span></label></li>
+<li><label><input type="checkbox" data-k="c6"><span><b>V-243451 (WPAW-00-001060)</b>: <code>UsermodeCodeIntegrityPolicyEnforcementStatus = 2</code>, <b>Not a Finding</b></span></label></li>
+<li><label><input type="checkbox" data-k="c7"><span>Known-block app blocked (3077). Approved apps and CAC/smart card sign-in work, with no unexpected 3077s</span></label></li>
+<li><label><input type="checkbox" data-k="c8"><span>After a reboot: still 2 / 2; deploy log says <i>already active</i></span></label></li>
+<li><label><input type="checkbox" data-k="c9"><span>Evidence saved (step logs, package folder, STIG output)</span></label></li>
+</ul>
+</section>
+
+<!-- ============================================================ OPS -->
+<section id="ops" class="p-ops"><h2><span class="chip">17</span>Day-2 operations</h2>
+<div class="tw"><table><thead><tr><th>Task</th><th>How</th><th>What happens on the PAWs</th></tr></thead><tbody>
+<tr><td><b>Publish an updated policy</b> (same mode)</td><td>Update <code>C:\WDAC\Source\Base-Enforce.xml</code> (same PolicyID), then <code>.\1_GPO_build_packages.ps1</code> &rarr; <code>.\2_GPO_create_gpos.ps1</code> &rarr; <code>.\4_GPO_validate_gpos.ps1</code></td><td>They move to the new, higher version in place at the next refresh, within <code>TaskIntervalHours</code>, or at boot. No reboot is needed.</td></tr>
+<tr><td><b>Add a PAW</b></td><td>Move the computer account into the target OU; reboot it or run <code>gpupdate /target:computer /force</code></td><td>It gets whichever mode is enabled</td></tr>
+<tr><td><b>Remove a PAW from scope</b></td><td>Move it out of the OU</td><td>Updates stop and the task is removed. <b>The policy stays</b> until removed (step 6).</td></tr>
+<tr><td><b>Demote Enforce &rarr; Audit</b></td><td>Do it in this order: <b>(1)</b> <code>.\3_GPO_set_mode.ps1 -Mode Audit</code> (it warns: expected), <b>(2)</b> <code>.\1_</code> &rarr; <code>.\2_</code> &rarr; <code>.\4_</code> (a new, higher pair), <b>(3)</b> <code>.\5_</code></td><td>They move from Enforce vN+1 to the <b>new</b> Audit version in place. Switching the link alone does nothing, because endpoints never downgrade (deploy-log event 2001).</td></tr>
+<tr><td><b>Back to Enforce</b></td><td><code>.\3_GPO_set_mode.ps1 -Mode Enforce</code></td><td>In place: the new Enforce version is higher</td></tr>
+</tbody></table></div>
+<div class="note warn"><b class="t">Why switch first when demoting?</b>If you publish while the Enforce link is still on, a PAW that refreshes in between takes the new, higher <i>Enforce</i> version and then ignores the new Audit one.</div>
+</section>
+
+<!-- ============================================================ ROLLBACK -->
+<section id="rollback" class="p-ops"><h2><span class="chip">18</span>Rollback and removal (step 6)</h2>
+<pre><code>.\6_GPO_rollback.ps1 -Action DisableLinks -WhatIf                 # preview only
+.\6_GPO_rollback.ps1 -Action DisableLinks                         # OU -&gt; mode None; devices KEEP their policy
+.\6_GPO_rollback.ps1 -Action RemovePolicy -ComputerName PAW01     # CiTool --remove-policy &lt;GUID&gt; (WinRM)
+.\6_GPO_rollback.ps1 -Action RemoveGpos                           # unlink + delete both GPOs</code></pre>
+<div class="tw"><table><thead><tr><th>Action</th><th>Effect</th><th>Guard</th></tr></thead><tbody>
+<tr><td><code>DisableLinks</code></td><td>No more deployments; the tasks are removed at the next refresh. Devices keep their current policy.</td><td>Y/N</td></tr>
+<tr><td><code>RemovePolicy</code></td><td>Removes the policy from the named devices <b>immediately</b> (STIG drops to 2 / 1 without a reboot; a reboot completes the removal). <b>V-243451 becomes a finding again.</b></td><td>Refuses while any WDAC link is enabled, because the GPO would redeploy it (<code>-Force</code> overrides for tests); Y/N</td></tr>
+<tr><td><code>RemoveGpos</code></td><td>Deletes both GPOs and their SYSVOL content. Devices keep their policy.</td><td>Y/N</td></tr>
+</tbody></table></div>
+<p class="sub">To relax a policy without removing it, publish a corrected package (Day-2) or demote to Audit. Both keep the devices managed.</p>
+</section>
+
+<!-- ============================================================ TROUBLE -->
+<section id="trouble" class="p-ops"><h2><span class="chip">19</span>Troubleshooting</h2>
+<div class="tw"><table><thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead><tbody>
+<tr><td>"running scripts is disabled on this system"</td><td>Execution policy</td><td><code>Set-ExecutionPolicy -Scope Process Bypass -Force</code> in each new window</td></tr>
+<tr><td>Steps 2, 3, 6: "needs a Y/N confirmation, but the session is non-interactive"</td><td>Remote or automated session</td><td>Run interactively, or add <code>-NoConfirm</code></td></tr>
+<tr><td>Step 5: <i>WDAC-GPO-Deploy-&lt;Mode&gt; not present</i></td><td>The PAW hasn't refreshed Group Policy yet</td><td><code>gpupdate /target:computer /force</code> on the PAW, wait about 2 minutes</td></tr>
+<tr><td>Step 5: <i>event source WDAC-GPO is not registered</i></td><td>The deploy script hasn't run on that PAW yet</td><td>As above</td></tr>
+<tr><td>Deploy log <b>2001</b> "newer version active … not downgrading"</td><td>You switched Enforce &rarr; Audit without a new pair</td><td>Build and publish a new pair (Day-2, demote)</td></tr>
+<tr><td>Deploy log <b>2002</b> "another custom base policy"</td><td>A different base policy is active, so the two intersect</td><td>Remove the other policy (<code>CiTool --remove-policy {GUID}</code>) or keep that device out of the OU</td></tr>
+<tr><td>Deploy log <b>2003</b> "not a workstation"</td><td>Server or DC in the OU</td><td>Move it out; servers are out of scope</td></tr>
+<tr><td>Deploy log <b>3004</b> hash mismatch</td><td>SYSVOL payload altered, or replication incomplete</td><td>Step 4 (checks every DC); re-run step 2</td></tr>
+<tr><td>Step 4 <b>FAIL</b>: BOTH links are enabled</td><td>Links edited by hand in GPMC</td><td><code>.\3_GPO_set_mode.ps1 -Mode Audit</code> or <code>-Mode Enforce</code></td></tr>
+<tr><td>Step 2 created a <b>second</b> pair of GPOs</td><td>Different OU or settings than last time (the names follow the OU)</td><td>Set fixed GPO names in <code>GPO-Settings.psd1</code>; delete the extra pair</td></tr>
+<tr><td>WARN: FilePath folder <i>is writable by …</i></td><td>Standard users can write there, so Windows ignores the rule</td><td>Fix the folder ACL in the image, or allow those files by publisher/hash</td></tr>
+<tr><td>Unexpected <b>3077</b> under Enforce</td><td>An app is missing from the policy</td><td>Add rules &rarr; <code>1 &rarr; 2 &rarr; 4</code>, or demote to Audit</td></tr>
+<tr><td>A manual install/repair fails under Enforce</td><td>MSI helper DLLs aren't allowed</td><td>Install through MECM (managed installer), or during an Audit window</td></tr>
+<tr><td>STIG reads 1 or 0 although the policy is active</td><td>Activation not complete, or a non-elevated session</td><td>Run elevated; reboot once; re-check. Confirm <code>Enabled:UMCI</code> is in the policy and Audit Mode isn't.</td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ============================================================ REFERENCE -->
+<section id="ref" class="p-ops"><h2><span class="chip">20</span>Reference</h2>
+<h3>Scripts and parameters (<code>OCT_2026\GPO\scripts</code>)</h3>
+<div class="tw"><table><thead><tr><th>#</th><th>Script</th><th>Runs on</th><th>Changes</th><th>Parameters</th></tr></thead><tbody>
+<tr><td>0</td><td><code>0_GPO_pre-flight.ps1</code></td><td>reference device</td><td>nothing</td><td><code>-TargetOU</code></td></tr>
+<tr><td>1</td><td><code>1_GPO_build_packages.ps1</code></td><td>reference device</td><td>local <code>Packages\&lt;stamp&gt;\</code></td><td><code>-EnforceXml</code> &middot; <code>-AuditVersion</code> / <code>-EnforceVersion</code> (auto) &middot; <code>-SupplementalXml</code></td></tr>
+<tr><td>2</td><td><code>2_GPO_create_gpos.ps1</code></td><td>reference device</td><td>creates/updates both GPOs; new links disabled (Y/N)</td><td><code>-PackagePath</code> &middot; <code>-TargetOU</code> &middot; <code>-AuditGpoName</code> &middot; <code>-EnforceGpoName</code> &middot; <code>-TaskIntervalHours</code> &middot; <code>-NoConfirm</code></td></tr>
+<tr><td>3</td><td><code>3_GPO_set_mode.ps1</code></td><td>reference device</td><td>enables one link (Y/N)</td><td><b><code>-Mode Audit|Enforce|None</code></b> &middot; <code>-GpUpdate</code> &middot; <code>-TargetOU</code> &middot; GPO names &middot; <code>-NoConfirm</code></td></tr>
+<tr><td>4</td><td><code>4_GPO_validate_gpos.ps1</code></td><td>reference device</td><td>nothing</td><td><code>-TargetOU</code> &middot; GPO names</td></tr>
+<tr><td>5</td><td><code>5_GPO_validate_endpoint.ps1</code></td><td>reference device &rarr; PAWs</td><td>nothing</td><td><code>-ComputerName</code> (local without WinRM) &middot; <code>-ExpectedMode</code> &middot; <code>-BlockTestPattern</code> &middot; <code>-TargetOU</code> &middot; GPO names</td></tr>
+<tr><td>6</td><td><code>6_GPO_rollback.ps1</code></td><td>reference device / PAWs</td><td>rollback/removal (Y/N)</td><td><b><code>-Action DisableLinks|RemovePolicy|RemoveGpos</code></b> &middot; <code>-ComputerName</code> &middot; <code>-Force</code> &middot; <code>-NoConfirm</code> &middot; <code>-WhatIf</code></td></tr>
+<tr><td>&ndash;</td><td><code>Deploy-WDACPolicy.ps1</code></td><td>PAWs (run by the GPO)</td><td>deploys the .cip with CiTool</td><td><code>-Mode</code> &middot; <code>-PayloadPath</code> &middot; <code>-NoConfirm</code> (always passed by the GPO)</td></tr>
+<tr><td>&ndash;</td><td><code>GPO-Settings.psd1</code>, <code>WDAC-GPO-Common.ps1</code>, <code>WDAC-Version.ps1</code>, <code>WDAC-Confirm.ps1</code></td><td colspan="3">settings and helpers (dot-sourced; you don't run them)</td></tr>
+</tbody></table></div>
+<h3>What each GPO contains</h3>
+<pre><code>\\&lt;domain&gt;\SYSVOL\&lt;domain&gt;\Policies\{GPO-GUID}\
+  GPT.INI                                           computer version (kept equal to AD)
+  Machine\Registry.pol                              SyncForegroundPolicy = 1 (always wait for the network)
+  Machine\Scripts\scripts.ini                       [Startup] Deploy-WDACPolicy.ps1 -Mode &lt;Mode&gt; -NoConfirm
+  Machine\Scripts\Startup\WDAC\{POLICY-GUID}.cip    compiled policy (Audit vN / Enforce vN+1)
+  Machine\Scripts\Startup\WDAC\manifest.json        mode, versions, SHA-256, FilePath rules
+  Machine\Scripts\Startup\WDAC\Deploy-WDACPolicy.ps1
+  Machine\Preferences\ScheduledTasks\ScheduledTasks.xml   WDAC-GPO-Deploy-&lt;Mode&gt; (SYSTEM, Replace, removePolicy=1)</code></pre>
+<h3>On each PAW</h3>
+<div class="tw"><table><thead><tr><th>Artifact</th><th>Path</th></tr></thead><tbody>
+<tr><td>Deploy log</td><td><code>C:\Windows\Logs\WDAC-GPO\Deploy-WDACPolicy.log</code></td></tr>
+<tr><td>State</td><td><code>C:\ProgramData\WDAC-GPO\state.json</code> (last run, result, versions, KMCI/UMCI)</td></tr>
+<tr><td>Active policy file</td><td><code>C:\Windows\System32\CodeIntegrity\CiPolicies\Active\{POLICY-GUID}.cip</code></td></tr>
+<tr><td>Scheduled task</td><td><code>\WDAC-GPO-Deploy-Audit</code> or <code>\WDAC-GPO-Deploy-Enforce</code></td></tr>
+<tr><td>Events (deploy script)</td><td>Application log, source <b>WDAC-GPO</b></td></tr>
+</tbody></table></div>
+<h3>Event IDs</h3>
+<div class="tw"><table><thead><tr><th>Log</th><th>ID</th><th>Meaning</th></tr></thead><tbody>
+<tr><td rowspan="5">Microsoft-Windows-CodeIntegrity/Operational</td><td>3076</td><td>Audit: the file <i>would</i> have been blocked</td></tr>
+<tr><td>3077</td><td>Enforce: the file <b>was blocked</b></td></tr>
+<tr><td>3089</td><td>Signature details for a 3076/3077 (signer, issuer, VerificationError); match them by ActivityID</td></tr>
+<tr><td>3033</td><td>The file didn't meet the required signing level (often appears alongside a 3077)</td></tr>
+<tr><td>3099</td><td>Policy refreshed and activated (shows name, id and status 0x0)</td></tr>
+<tr><td rowspan="5">Application, source WDAC-GPO</td><td>1000 / 1001 / 1002</td><td>Already current / deployed (old &rarr; new) / UMCI matches the mode</td></tr>
+<tr><td>2001</td><td>A newer version is active: not downgrading</td></tr>
+<tr><td>2002 / 2003 / 2004</td><td>Another base policy active / not a workstation (skipped) / UMCI doesn't match the mode</td></tr>
+<tr><td>2005 / 2010</td><td>Manual run not confirmed / another run in progress</td></tr>
+<tr><td>3000&ndash;3006</td><td>Errors: unexpected / no CiTool / mode mismatch / file missing / hash mismatch / CiTool failed / confirmation needed</td></tr>
+</tbody></table></div>
+<h3><code>Win32_DeviceGuard</code> values</h3>
+<p><code>0</code> OFF &middot; <code>1</code> AUDIT &middot; <code>2</code> ENFORCING. Only <code>2</code> passes V-243450 (<code>CodeIntegrityPolicyEnforcementStatus</code>) and V-243451 (<code>UsermodeCodeIntegrityPolicyEnforcementStatus</code>).</p>
+</section>
+
+<!-- ============================================================ RESOURCES -->
+<section id="resources" class="p-verify"><h2><span class="chip">21</span>Resources</h2>
+<div class="res">
+<div class="rcard p-stig"><h4>&#128737; DISA STIG</h4><ul>
+<li><a href="https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/U_MS_Windows_PAW_V3R3_STIG.zip">Microsoft Windows PAW STIG, V3R3 (DISA download, .zip)</a><span>V-243450 / WPAW-00-001050 and V-243451 / WPAW-00-001060, both CAT II. Open it in STIG Viewer for the full check and fix text.</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/hardware-security/enable-virtualization-based-protection-of-code-integrity">Code integrity status values (Win32_DeviceGuard)</a><span>What 0 / 1 / 2 mean for the two properties the STIG checks</span></li>
+</ul></div>
+<div class="rcard p-prep"><h4>&#128218; App Control for Business: design</h4><ul>
+<li><a href="https://learn.microsoft.com/windows/security/application-security/application-control/app-control-for-business/appcontrol">App Control for Business overview</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create">Policy rule options and file rule levels</a><span>Option 0 UMCI, option 3 Audit Mode, option 13 Managed Installer; FilePath rules and runtime protection</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/deploy-multiple-appcontrol-policies">Use multiple App Control policies</a><span>Why the GPOs ship a multiple-policy-format {GUID}.cip</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/script-enforcement">Script enforcement</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/feature-availability">Feature availability by Windows version</a></li>
+</ul></div>
+<div class="rcard p-publish"><h4>&#128640; Deployment</h4><ul>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-with-script">Deploy App Control policies with a script</a><span>The CiTool approach the GPO startup script and task use</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/deploy-appcontrol-policies-using-group-policy">Deploy with the built-in Group Policy setting</a><span>The legacy single-policy option this solution avoids</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/citool-commands">CiTool commands</a><span><code>--list-policies</code>, <code>--update-policy</code>, <code>--remove-policy</code>, <code>--refresh</code></span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/disable-appcontrol-policies">Remove App Control policies</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/configure-authorized-apps-deployed-with-a-managed-installer">Managed installer</a> &middot; <a href="https://learn.microsoft.com/en-us/mem/configmgr/core/clients/deploy/about-client-installation-properties#managedinstaller">MECM <code>MANAGEDINSTALLER</code> client property</a><span>How MECM-deployed software (including MSI helper DLLs) stays allowed under Enforce</span></li>
+</ul></div>
+<div class="rcard p-audit"><h4>&#128269; Events and troubleshooting</h4><ul>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-id-explanations">Understanding App Control events</a><span>3076 audit, 3077 block, 3089 signature, 3099 policy activated</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-tag-explanations">Event tags</a><span>VerificationError (for example 18/21 signer not allowed, 26 explicitly denied), signing levels</span></li>
+<li><a href="https://learn.microsoft.com/windows/security/application-security/application-control/app-control-for-business/operations/appcontrol-debugging-and-troubleshooting">Debugging and troubleshooting</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/applications-that-can-bypass-appcontrol">Microsoft recommended block rules</a> &middot; <a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/microsoft-recommended-driver-block-rules">driver block rules</a></li>
+</ul></div>
+<div class="rcard p-build"><h4>&#128736; Tools</h4><ul>
+<li><a href="https://webapp-wdac-wizard.azurewebsites.net/">App Control Policy Wizard</a><span>Create and edit base and supplemental policies (keep the PolicyID when you edit)</span></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/appcontrol-wizard-editing-policy">Editing a policy with the Wizard</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/deployment/merge-appcontrol-policies">Merge App Control policies</a></li>
+</ul></div>
+<div class="rcard p-enforce"><h4>&#128193; This repository</h4><ul>
+<li><a href="https://github.com/dcodev1702/STIG-WDAC-WIN11-25H2">STIG-WDAC-WIN11-25H2 on GitHub</a></li>
+<li><a href="https://github.com/dcodev1702/STIG-WDAC-WIN11-25H2/blob/main/OCT_2026/GPO/README.md">OCT_2026/GPO/README.md</a><span>The full reference for the multi-policy GPO deployment: architecture, every check, proving-ground procedure</span></li>
+<li><a href="https://github.com/dcodev1702/STIG-WDAC-WIN11-25H2/tree/main/OCT_2026/GPO/scripts">OCT_2026/GPO/scripts</a><span>Steps 0&ndash;6, Deploy-WDACPolicy.ps1, GPO-Settings.psd1</span></li>
+<li><a href="https://github.com/dcodev1702/STIG-WDAC-WIN11-25H2/tree/main/OCT_2026/GPO/policy">OCT_2026/GPO/policy</a><span>Example policy kit + SHA256SUMS.txt</span></li>
+<li><a href="https://github.com/dcodev1702/STIG-WDAC-WIN11-25H2/blob/main/OCT_2026/scripts/7_DISA_STIG_CHECK.ps1">OCT_2026/scripts/7_DISA_STIG_CHECK.ps1</a><span>Formatted STIG report for V-243450 / V-243451</span></li>
+</ul></div>
+</div>
+</section>
+
+<footer>Microsoft Windows PAW STIG &middot; V-243450 (WPAW-00-001050) &middot; V-243451 (WPAW-00-001060). The example outputs come from a lab run of these scripts (domain skynet-home.local). Your names, versions and GUIDs will differ.</footer>
+<a class="top" href="#top" aria-label="Back to top">&uarr;</a>
+</div>
+<script>
+(function () {
+  // copy buttons on command blocks (not on example output)
+  document.querySelectorAll('pre:not(.out)').forEach(function (pre) {
+    var b = document.createElement('button'); b.className = 'copy'; b.type = 'button'; b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      var t = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, function () { fallback(t); done(); }); } else { fallback(t); done(); }
+    });
+    pre.appendChild(b);
+  });
+  function fallback(t) { var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(a); }
+  // sign-off checklist: remembered in this browser only (optional)
+  var key = 'wdac-gpo-howto-checklist';
+  var saved = {}; try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { saved = {}; }
+  document.querySelectorAll('#checklist input[type=checkbox]').forEach(function (cb) {
+    cb.checked = !!saved[cb.dataset.k];
+    cb.addEventListener('change', function () { saved[cb.dataset.k] = cb.checked; try { localStorage.setItem(key, JSON.stringify(saved)); } catch (e) {} });
+  });
+})();
+</script>
+</body></html>

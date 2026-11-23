@@ -6,6 +6,9 @@
 > [!IMPORTANT]
 > **Why a script inside a GPO, and not the built-in setting?** Microsoft: *"Group Policy-based deployment of App Control for Business policies only supports single-policy format."* The built-in *Deploy App Control for Business* setting writes a legacy `SiPolicy.p7b`. Multiple-policy `{GUID}.cip` files must be deployed with `CiTool --update-policy` (Windows 11 22H2+). These GPOs carry the `.cip`, a manifest, and the deployment script in their own SYSVOL folder, and run it as SYSTEM.
 
+> [!TIP]
+> **Step-by-step how-to:** [`docs/WDAC-GPO-Audit-to-Enforce-HowTo.html`](docs/WDAC-GPO-Audit-to-Enforce-HowTo.html) walks an admin from an approved policy to the **Enforce GPO linked and enabled**, with what each step should print and a sign-off checklist for **Microsoft Windows PAW STIG V-243450 (WPAW-00-001050) and V-243451 (WPAW-00-001060)**. GitHub shows HTML files as source: download the file (or clone the repo) and open it in a browser.
+
 ---
 
 ## Contents
